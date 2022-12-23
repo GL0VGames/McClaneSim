@@ -1,0 +1,21 @@
+{
+  "name": "mcclanesim",
+  "version": "0.0.1",
+  "description": "Find and free the hostages!",
+  "main": "server.js",
+  "scripts": {
+    "start": "gulp build:dev"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/GL0VGames/McClaneSim.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "gulp": "4.0.2",
+    "gulp-typescript": "6.0.0-alpha.1",
+	"gulp-sourcemaps": "3.0.0",
+	"browser-sync": "2.27.11"
+  }
+}
