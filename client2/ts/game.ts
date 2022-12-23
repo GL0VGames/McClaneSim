@@ -121,8 +121,9 @@ class McClaneGame {
 		this.actionManager = new ActionManager(this.map, this.player, this.console);
 
 		dom.get("#in")!.addEventListener("keydown", (e) => {
+			let userInput = "";
 			if (e.code == "Enter") {
-				let userInput = this.console.getUserInput();
+				userInput = this.console.getUserInput();
 				this.console.printUserInput(userInput);
 				this.console.clearUserInput();
 				let command = this.actionManager.processCommand(userInput);
@@ -130,6 +131,12 @@ class McClaneGame {
 					this.turnManager.takeTurn(command);
 				else
 					this.console.unknownCommand(userInput);
+			}
+			else if (e.code == "ArrowUp") 
+				this.console.setLastCommand();
+
+			if (e.code == "Enter" || e.code == "ArrowUp") {
+				
 			}
 		})
 	}
@@ -164,6 +171,7 @@ interface Command {
 class Console {
 	private output: HTMLDivElement;
 	private input: HTMLInputElement;
+	private lastCommand: string = "";
 
 	public getUserInput() {
 		return this.input.value;
@@ -173,7 +181,12 @@ class Console {
 		this.input.value = "";
 	}
 
+	public setLastCommand() {
+		this.input.value = this.lastCommand;
+	}
+
 	public printUserInput(text: string) {
+		this.lastCommand = text;
 		this.print(`> ${text}`)
 	}
 
@@ -224,6 +237,18 @@ class ActionManager {
 		},
 		go: (param:string[]) => {this.direction(param[0])},
 		move: (param:string[]) => {this.direction(param[0])},
+		dev: (param:string[]) => {
+			let viewer = dom.get("#worldViewer");
+			if (param[0] == "map")
+				if (viewer.style.display != "none") {
+					viewer.style.display = "none";
+					this.console.print("Map hidden");
+				}
+				else {
+					viewer.style.display = "grid";
+					this.console.print("Map visible");
+				}
+		},
 		_: (param:string[]) => {},
 	}
 
