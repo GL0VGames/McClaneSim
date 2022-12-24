@@ -20,6 +20,7 @@ export class Vector2D {
 class Resource {
 	name: string = "";
 	desc: string = "";
+	type: any;
 	constructor() {}
 }
 
@@ -38,7 +39,7 @@ export class Key extends Resource {
 	}
 }
 
-enum HealingType {
+export enum HealingType {
 	chips,
 	apple,
 	bar,
@@ -50,20 +51,22 @@ export class Healing extends Resource {
 	private types = {
 		[HealingType.chips]: {name:"chips",heal:2,desc:"a small package of low fat, baked chips"},
 		[HealingType.apple]:{name:"apple",heal:3,desc:"a firm, mostly red, medium-sized apple"},
-		[HealingType.bar]:{name:"breakfast bar",heal:4,desc:"a sealed breakfast bar with fruit and nuts"},
-		[HealingType.firstaid]:{name:"Office FirstAid",heal:10,desc:"a small FirstAid kit for office-type emergencies - it's nothing fancy, but the pack of gauze and adrenaline shot are helpful."}
+		[HealingType.bar]:{name:"energy bar",heal:4,desc:"a sealed energy bar, high in protein and sugar"},
+		[HealingType.firstaid]:{name:"office FirstAid kit",heal:10,desc:"a small FirstAid kit for office-type emergencies - it's nothing fancy, but the pack of gauze and adrenaline shot are helpful."}
 	};
 	constructor(_type?: HealingType) {
 		super();
 		// firstaid only spawns in storage rooms
-		let type = this.types[_type || getRandomIntExc(0, Object.keys(this.types).length - 1) as HealingType];
+		let healingType = _type || getRandomIntExc(0, Object.keys(this.types).length - 1) as HealingType;
+		let type = this.types[healingType];
+		this.type = healingType;
 		this.name = type.name;
 		this.heal = type.heal;
 		this.desc = type.desc;
 	}
 }
 
-export enum Weapons {
+export enum WeaponType {
 	pistol9mm,
 	revolver,
 	shotgun,
@@ -71,7 +74,7 @@ export enum Weapons {
 	fist
 }
 
-enum AmmoCaliber {
+export enum AmmoCaliber {
 	p9mm,
 	p44Mag,
 	sh12gauge,
@@ -83,75 +86,82 @@ export class Weapon extends Resource {
 	ammo: AmmoCaliber;
 	damage: number;
 	clip: number = 0;
-	constructor(type: Weapons) {
+	type: WeaponType;
+	
+	constructor(type: WeaponType) {
 		super();
-		if (type == Weapons.pistol9mm) {
-			this.name = "9mm Pistol";
+		this.type = type;
+		if (this.type == WeaponType.pistol9mm) {
+			this.name = "pistol";
 			this.ammo = AmmoCaliber.p9mm;
 			this.damage = 5;
 			this.clip = 10;
 			this.desc = "a small but dependable 9mm pistol."
 		}
-		else if (type == Weapons.revolver) {
-			this.name = "Magnum Revolver";
+		else if (this.type == WeaponType.revolver) {
+			this.name = "magnum revolver";
 			this.ammo = AmmoCaliber.p44Mag;
 			this.damage = 10;
 			this.clip = 6;
-			this.desc = "a powerful revolver."
+			this.desc = "a powerful magnum revolver."
 		}
-		else if (type == Weapons.rifle) {
-			this.name = "Bullpup Rifle";
+		else if (this.type == WeaponType.rifle) {
+			this.name = "bullpup rifle";
 			this.ammo = AmmoCaliber.r762NATO;
 			this.damage = 8;
 			this.clip = 20;
 			this.desc = "a bullpup style rife, solid and dependable."
 		}
-		else if (type == Weapons.shotgun) {
-			this.name = "12 Gauge Shotgun";
+		else if (this.type == WeaponType.shotgun) {
+			this.name = "12 gauge shotgun";
 			this.ammo = AmmoCaliber.sh12gauge;
 			this.damage = 15;
 			this.clip = 2;
 			this.desc = "a powerful, twin barrel shotgun."
 		}
-		else //if (type == Weapons.fist) {
-			this.name = "Angry Fists";
+		else {//if (type == Weapons.fist) {
+			this.name = "angry fists";
 			this.damage = 3;
 			this.desc = "my own two fists.";
 			this.ammo = AmmoCaliber.fist;
+		}
 	}
 }
 
 export class AmmoPile extends Resource {
 	caliber: AmmoCaliber;
 	quantity: number = 0;
-	constructor(type?: AmmoCaliber) {
+	constructor(type?: AmmoCaliber, resource: boolean = true) {
 		super();
 		this.caliber = type || getRandomInt(0, 4) as AmmoCaliber;
 		if (type == AmmoCaliber.p9mm) {
-			this.name = "Pistol Ammo";
-			this.quantity = getRandomInt(4,10);
-			this.desc = "a pile of 9mm pistol ammo";
+			this.name = "pistol ammo";
+			if (resource) this.quantity = getRandomInt(5, 10);
+			else this.quantity = 0;
+			this.desc = "a pile of 9mm ammunition";
 		}
 		else if (type == AmmoCaliber.p44Mag) {
-			this.name = "Magnum Ammo";
-			this.quantity = getRandomInt(2, 5);
-			this.desc = "a pile of .44 Magnum revolver ammo";
+			this.name = "magnum revolver ammo";
+			if (resource) this.quantity = getRandomInt(3, 5);
+			else this.quantity = 0;
+			this.desc = "a pile of .44 Magnum ammunition";
 		}
 		else if (type == AmmoCaliber.r762NATO) {
-			this.name = "Rifle Ammo";
-			this.quantity = getRandomInt(3,8);
-			this.desc = "a pile of 7.62x51mm NATO ammo";
+			this.name = "rifle ammo";
+			if (resource) this.quantity = getRandomInt(4, 8);
+			else this.quantity = 0;
+			this.desc = "a pile of 7.62x51mm NATO ammunition";
 		}
 		else if (type == AmmoCaliber.sh12gauge) {
-			this.name = "Shotgun Ammo";
-			this.quantity = getRandomInt(1, 3);
-			this.desc = "a pile of 12 gauge ammo"
+			this.name = "shotgun ammo";
+			if (resource) this.quantity = getRandomInt(2, 4);
+			else this.quantity = 0;
+			this.desc = "a pile of 12 gauge ammunition";
 		}
 	}
 }
 
 export enum TileType {
-	stairs = -1, // only used in exported contexts
 	empty = 1,
 	stairUp,
 	stairDown,
@@ -183,6 +193,31 @@ export class Tile {
 		`a large meeting room with ${this.getRandItems()}`, 
 		`a lounge with ping-pong tables, a mini bar, and some ${this.getRandItems()}`
 	];
+
+	public checkWeapons(type?: WeaponType) {
+		if (type) return this.resources.filter(x => x instanceof Weapon && x.type == type) as Weapon[];
+		return this.resources.filter(x => x instanceof Weapon) as Weapon[];
+	}
+
+	public checkAmmo(caliber?: AmmoCaliber) {
+		if (caliber) return this.resources.filter(x => x instanceof AmmoPile && x.caliber == caliber) as AmmoPile[];
+		else return this.resources.filter(x => x instanceof AmmoPile) as AmmoPile[];
+	} 
+
+	public checkKeys(arr: boolean = false) {
+		let keyArr = this.resources.filter(x => x instanceof Key);
+		if (arr) return keyArr;
+		else return keyArr.length;
+	}
+
+	public checkHealing(type?: HealingType) {
+		if (type) return this.resources.filter(x => x instanceof Healing && x.type == type) as Healing[];
+		else return this.resources.filter(x => x instanceof Healing) as Healing[];
+	}
+
+	public remove(item: Weapon | AmmoPile | Key | Healing) {
+		this.resources.splice(this.resources.indexOf(item), 1);
+	}
 
 	constructor(position: Vector2D) {
 		this.location = position;
