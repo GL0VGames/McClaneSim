@@ -1,4 +1,4 @@
-import { dom } from "./lib.js";
+import { dom, utils } from "./lib.js";
 
 export class Vector2D {
 	x: number;
@@ -7,7 +7,10 @@ export class Vector2D {
 		return new Vector2D(a.x + b.x, a.y + b.y);
 	}
 	static random(xMax: number, yMax: number) {
-		return new Vector2D(getRandomIntExc(0, xMax), getRandomIntExc(0, yMax));
+		return new Vector2D(utils.getRandomIntExc(0, xMax), utils.getRandomIntExc(0, yMax));
+	}
+	static equals(a: Vector2D, b: Vector2D) {
+		return a.x == b.x && a.y == b.y;
 	}
 	public toString() {
 		return `{${this.x},${this.y}}`;
@@ -28,12 +31,12 @@ export class Key extends Resource {
 	//room: Tile;
 	private types = [
 		{name:"Rusty Key",desc:"A rusty key. Seems to be long forgotten."}, 
-		{name:"Good Key",desc:"A steel key in good condition."}, 
+		{name:"Good Key",desc:"A WeaponTypesteel key in good condition."}, 
 		{name:"Worn Key",desc:"A worn key - hopefully it still works!"}
 	];
 	constructor() {
 		super();
-		let type = this.types[getRandomIntExc(0, this.types.length)]
+		let type = this.types[utils.getRandomIntExc(0, this.types.length)]
 		this.name = type.name;
 		this.desc = type.desc;
 	}
@@ -57,7 +60,7 @@ export class Healing extends Resource {
 	constructor(_type?: HealingType) {
 		super();
 		// firstaid only spawns in storage rooms
-		let healingType = _type || getRandomIntExc(0, Object.keys(this.types).length - 1) as HealingType;
+		let healingType = _type || utils.getRandomIntExc(0, Object.keys(this.types).length - 1) as HealingType;
 		let type = this.types[healingType];
 		this.type = healingType;
 		this.name = type.name;
@@ -67,6 +70,7 @@ export class Healing extends Resource {
 }
 
 export enum WeaponType {
+	dualPistol9mm,
 	pistol9mm,
 	revolver,
 	shotgun,
@@ -82,48 +86,94 @@ export enum AmmoCaliber {
 	fist
 }
 
+export class Clip {
+	caliber: AmmoCaliber;
+	maxRounds: number;
+	currRounds: number;
+
+	constructor(caliber: AmmoCaliber, maxRounds: number) {
+		this.caliber = caliber;
+		this.maxRounds = maxRounds;
+		this.currRounds = 0;
+	}
+}
+
 export class Weapon extends Resource {
-	ammo: AmmoCaliber;
+	ammoCaliber: AmmoCaliber;
 	damage: number;
-	clip: number = 0;
+	clip: Clip;
 	type: WeaponType;
+
+	public reload(ammo: AmmoPile) {
+		if (ammo.caliber == this.ammoCaliber) {
+			let missing = this.clip.maxRounds - this.clip.currRounds;
+			let reloaded = 0;
+			if (ammo.quantity >= missing) {
+				reloaded = missing;
+				this.clip.currRounds += missing;
+				ammo.quantity -= missing;
+			}
+			else {
+				reloaded = ammo.quantity;
+				this.clip.currRounds += ammo.quantity;
+				ammo.quantity = 0
+			}
+			return reloaded;
+		}
+		else return 0;
+	}
+
+	public shoot(actor?: Actor) {
+		if (this.clip.currRounds > 0) {
+			if (actor) actor.damage(this.damage);
+			this.clip.currRounds--;
+		}
+	}
 	
 	constructor(type: WeaponType) {
 		super();
 		this.type = type;
-		if (this.type == WeaponType.pistol9mm) {
+		if (this.type == WeaponType.dualPistol9mm) {
+			this.name = "akimbo pistols";
+			this.ammoCaliber = AmmoCaliber.p9mm;
+			this.damage = 10;
+			this.clip = new Clip(this.ammoCaliber, 20);
+			this.desc = "two small but dependable 9mm pistols, one for each hand."
+		}
+		else if (this.type == WeaponType.pistol9mm) {
 			this.name = "pistol";
-			this.ammo = AmmoCaliber.p9mm;
+			this.ammoCaliber = AmmoCaliber.p9mm;
 			this.damage = 5;
-			this.clip = 10;
+			this.clip = new Clip(this.ammoCaliber, 10);
 			this.desc = "a small but dependable 9mm pistol."
 		}
 		else if (this.type == WeaponType.revolver) {
 			this.name = "magnum revolver";
-			this.ammo = AmmoCaliber.p44Mag;
+			this.ammoCaliber = AmmoCaliber.p44Mag;
 			this.damage = 10;
-			this.clip = 6;
+			this.clip = new Clip(this.ammoCaliber, 6);
 			this.desc = "a powerful magnum revolver."
 		}
 		else if (this.type == WeaponType.rifle) {
 			this.name = "bullpup rifle";
-			this.ammo = AmmoCaliber.r762NATO;
+			this.ammoCaliber = AmmoCaliber.r762NATO;
 			this.damage = 8;
-			this.clip = 20;
+			this.clip = new Clip(this.ammoCaliber, 20);
 			this.desc = "a bullpup style rife, solid and dependable."
 		}
 		else if (this.type == WeaponType.shotgun) {
 			this.name = "12 gauge shotgun";
-			this.ammo = AmmoCaliber.sh12gauge;
+			this.ammoCaliber = AmmoCaliber.sh12gauge;
 			this.damage = 15;
-			this.clip = 2;
+			this.clip = new Clip(this.ammoCaliber, 2);
 			this.desc = "a powerful, twin barrel shotgun."
 		}
 		else {//if (type == Weapons.fist) {
 			this.name = "angry fists";
 			this.damage = 3;
 			this.desc = "my own two fists.";
-			this.ammo = AmmoCaliber.fist;
+			this.ammoCaliber = AmmoCaliber.fist;
+			this.clip = new Clip(this.ammoCaliber, -1);
 		}
 	}
 }
@@ -133,30 +183,35 @@ export class AmmoPile extends Resource {
 	quantity: number = 0;
 	constructor(type?: AmmoCaliber, resource: boolean = true) {
 		super();
-		this.caliber = type || getRandomInt(0, 4) as AmmoCaliber;
+		this.caliber = type || utils.getRandomInt(0, 3) as AmmoCaliber;
 		if (type == AmmoCaliber.p9mm) {
 			this.name = "pistol ammo";
-			if (resource) this.quantity = getRandomInt(5, 10);
+			if (resource) this.quantity = utils.getRandomInt(5, 10);
 			else this.quantity = 0;
 			this.desc = "a pile of 9mm ammunition";
 		}
 		else if (type == AmmoCaliber.p44Mag) {
 			this.name = "magnum revolver ammo";
-			if (resource) this.quantity = getRandomInt(3, 5);
+			if (resource) this.quantity = utils.getRandomInt(3, 5);
 			else this.quantity = 0;
 			this.desc = "a pile of .44 Magnum ammunition";
 		}
 		else if (type == AmmoCaliber.r762NATO) {
 			this.name = "rifle ammo";
-			if (resource) this.quantity = getRandomInt(4, 8);
+			if (resource) this.quantity = utils.getRandomInt(4, 8);
 			else this.quantity = 0;
 			this.desc = "a pile of 7.62x51mm NATO ammunition";
 		}
 		else if (type == AmmoCaliber.sh12gauge) {
 			this.name = "shotgun ammo";
-			if (resource) this.quantity = getRandomInt(2, 4);
+			if (resource) this.quantity = utils.getRandomInt(2, 4);
 			else this.quantity = 0;
 			this.desc = "a pile of 12 gauge ammunition";
+		}
+		else if (type == AmmoCaliber.fist) {
+			this.name = "fists";
+			this.quantity = 2;
+			this.desc = "my own two fists";
 		}
 	}
 }
@@ -185,7 +240,7 @@ export class Tile {
 		"desks and shelves",
 	];
 	private getRandItems() {
-		return this.randItems[getRandomIntExc(0,4)];
+		return this.randItems[utils.getRandomIntExc(0,4)];
 	}
 	private randDescriptions = [
 		`a small room with ${this.getRandItems()}`, 
@@ -195,12 +250,12 @@ export class Tile {
 	];
 
 	public checkWeapons(type?: WeaponType) {
-		if (type) return this.resources.filter(x => x instanceof Weapon && x.type == type) as Weapon[];
+		if (typeof type != "undefined") return this.resources.filter(x => x instanceof Weapon && x.type == type) as Weapon[];
 		return this.resources.filter(x => x instanceof Weapon) as Weapon[];
 	}
 
 	public checkAmmo(caliber?: AmmoCaliber) {
-		if (caliber) return this.resources.filter(x => x instanceof AmmoPile && x.caliber == caliber) as AmmoPile[];
+		if (typeof caliber != "undefined") return this.resources.filter(x => x instanceof AmmoPile && x.caliber == caliber) as AmmoPile[];
 		else return this.resources.filter(x => x instanceof AmmoPile) as AmmoPile[];
 	} 
 
@@ -211,7 +266,7 @@ export class Tile {
 	}
 
 	public checkHealing(type?: HealingType) {
-		if (type) return this.resources.filter(x => x instanceof Healing && x.type == type) as Healing[];
+		if (typeof type != "undefined") return this.resources.filter(x => x instanceof Healing && x.type == type) as Healing[];
 		else return this.resources.filter(x => x instanceof Healing) as Healing[];
 	}
 
@@ -222,8 +277,154 @@ export class Tile {
 	constructor(position: Vector2D) {
 		this.location = position;
 		this.type = TileType.empty;
-		this.desc = this.randDescriptions[getRandomInt(0,2)];
+		this.desc = this.randDescriptions[utils.getRandomInt(0,2)];
 		this.resources = [];
+	}
+}
+
+class Inventory {
+	private ammo: {[name:string]: AmmoPile};
+	private weapons: Weapon[] = [];
+	private keys: Key[] = [];
+	private healing: Healing[] =[];
+
+	public add(item: AmmoPile | Weapon | Key | Healing | (AmmoPile | Weapon | Key | Healing)[]) {
+		if (item instanceof AmmoPile)
+			this.ammo[item.caliber].quantity += item.quantity;
+		else if (item instanceof Weapon)
+			this.weapons.push(item);
+		else if (item instanceof Key)
+			this.keys.push(item);
+		else if (item instanceof Healing)
+			this.healing.push(item);
+		else if (item.length) {
+			for (let thing of item) {
+				if (thing instanceof AmmoPile)
+					this.ammo[thing.caliber].quantity += thing.quantity;
+				else if (thing instanceof Weapon)
+					this.weapons.push(thing);
+				else if (thing instanceof Key)
+					this.keys.push(thing);
+				else if (thing instanceof Healing)
+					this.healing.push(thing);
+			}
+		}
+	}
+
+	public remove(item: AmmoPile | Weapon | Key | Healing) {
+		if (item instanceof AmmoPile)
+		this.ammo[item.caliber].quantity -= item.quantity;
+		else if (item instanceof Weapon)
+			utils.arrayRemove(item, this.weapons);
+		else if (item instanceof Key)
+			utils.arrayRemove(item, this.keys);
+		else if (item instanceof Healing)
+			utils.arrayRemove(item, this.healing);
+	}
+
+	public checkWeapons(type?: WeaponType) {
+		if (typeof type != "undefined") return this.weapons.filter(x => x.type == type);
+		else return this.weapons.length;
+	}
+
+	public checkAmmo(caliber: AmmoCaliber) {
+		return this.ammo[caliber].quantity;
+	} 
+
+	public getAmmo(caliber: AmmoCaliber) {
+		return this.ammo[caliber];
+	}
+
+	public checkKeys() {
+		return this.keys.length;
+	}
+
+	public checkHealing(type?: HealingType) {
+		if (typeof type != "undefined") return this.healing.filter(x => x.type == type);
+		else return this.healing.length;
+	}
+
+	public createDualPistols(pistolA: Weapon, pistolB: Weapon) {
+		if (pistolA.type == WeaponType.pistol9mm && pistolB.type == WeaponType.pistol9mm) {
+			let chamberedRounds = pistolA.clip.currRounds + pistolB.clip.currRounds;
+			this.remove(pistolA);
+			this.remove(pistolB);
+			let dualPistols = new Weapon(WeaponType.dualPistol9mm);
+			dualPistols.clip.currRounds = chamberedRounds;
+			this.add(dualPistols);
+			return dualPistols;
+		}
+	}
+
+	public empty() {
+		let arr: (AmmoPile | Weapon | Key | Healing)[] = ([this.ammo[AmmoCaliber.p9mm],this.ammo[AmmoCaliber.p44Mag],this.ammo[AmmoCaliber.r762NATO],this.ammo[AmmoCaliber.sh12gauge]] as any).concat(this.weapons, this.keys, this.healing);
+		this.setupAmmo();
+		this.weapons = [];
+		this.keys = [];
+		this.healing = [];
+		return arr;
+	}
+
+	public setupAmmo() {
+		this.ammo = {};
+		this.ammo[AmmoCaliber.p9mm] = new AmmoPile(AmmoCaliber.p9mm, false);
+		this.ammo[AmmoCaliber.p44Mag] = new AmmoPile(AmmoCaliber.p44Mag, false);
+		this.ammo[AmmoCaliber.r762NATO] = new AmmoPile(AmmoCaliber.r762NATO, false);
+		this.ammo[AmmoCaliber.sh12gauge] = new AmmoPile(AmmoCaliber.sh12gauge, false);
+	}
+
+	constructor() {
+		this.ammo = {};
+		this.setupAmmo();
+	}
+}
+
+export class Actor {
+	private location: Tile;
+	name: string;
+	health: number;
+	inventory: Inventory;
+	equippedWeapon: Weapon;
+	inFight: boolean = false;
+
+	// TurnState helps to distinguish if the the action taken should count as a complete turn
+	// Malformed commands obviously do not count and certain actions are free (peaking, searching a room, picking items up, etc.)
+	turn(_action:Function, _params:string[]) {console.error("Not Implemented"); return TurnState.done;};
+
+	public getLoc() {
+		return this.location.location;
+	}
+
+	public getLocType() {
+		return this.location.type;
+	}
+
+	public setLocation(tile: Tile) {
+		this.location = tile;
+	}
+
+	public heal(health: number) {
+		this.health += health;
+	}
+
+	public damage(damage: number) {
+		this.health -= damage;
+		if (this.health < 0)
+			this.die();
+	}
+
+	public die() {
+		this.location.resources.push(...this.inventory.empty());
+	}
+
+	constructor(loc: Tile, health = 10, name: string = "placeholder") {
+		this.location = loc;
+		this.health = health;
+		this.inventory = new Inventory();
+		let fists = new Weapon(WeaponType.fist);
+		this.inventory.add(fists);
+		this.equippedWeapon = fists;
+		this.name = name;
 	}
 }
 
@@ -281,23 +482,23 @@ export class World {
 			let loc: Vector2D;
 			do {
 				if (stairWells == 1) {
-					tile = this.getTile(getRandomIntExc(0, this.x), 0) as Tile;
+					tile = this.getTile(utils.getRandomIntExc(0, this.x), 0) as Tile;
 				}
 				else if (stairWells == 2) {
 					let half = Math.floor(this.x/2);
 					if (counter == 0)
-						tile = this.getTile(getRandomIntExc(0, half), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(0, half), 0) as Tile;
 					else 
-						tile = this.getTile(getRandomIntExc(half, this.x), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(half, this.x), 0) as Tile;
 				}
 				else {
 					let third = Math.floor(this.x/3);
 					if (counter == 0)
-						tile = this.getTile(getRandomIntExc(0, third), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(0, third), 0) as Tile;
 					else if (counter == 1)
-						tile = this.getTile(getRandomIntExc(third, third * 2), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(third, third * 2), 0) as Tile;
 					else 
-						tile = this.getTile(getRandomIntExc(third * 2, this.x), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(third * 2, this.x), 0) as Tile;
 				}
 				loc = tile.location;
 			}
@@ -318,23 +519,23 @@ export class World {
 		// Resources
 		// Weapons
 		let max = Math.round((this.x + this.y) / 2);
-		let randMaxWeapons = this.maxWeapons + getRandomInt(-2, max);
+		let randMaxWeapons = this.maxWeapons + utils.getRandomInt(-2, max);
 		for (let max = 0; max < randMaxWeapons; max++) {
 			let newTile = this.getTile(Vector2D.random(this.x, this.y));
 			// Only pistols spawn randomly
-			newTile?.resources.push(new Weapon(getRandomInt(0,1)));
+			newTile?.resources.push(new Weapon(utils.getRandomInt(1,2)));
 		}
 
 		// Ammo
-		let randMaxAmmo = this.maxAmmo + getRandomInt(-2, max);
+		let randMaxAmmo = this.maxAmmo + utils.getRandomInt(-2, max);
 		for (let max = 0; max < randMaxAmmo; max++) {
-			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new AmmoPile(getRandomInt(0,3)));
+			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
 		}
 
 		// Healing
-		let randMaxHealing = this.maxHealing + getRandomInt(-2, max);
+		let randMaxHealing = this.maxHealing + utils.getRandomInt(-2, max);
 		for (let x = 0; x < randMaxHealing; x++) {
-			this.getTile(getRandomIntExc(0, this.x), getRandomIntExc(0, this.y))?.resources.push(new Healing());
+			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new Healing());
 		}
 
 		// Hostages
@@ -344,8 +545,8 @@ export class World {
 		do {
 			fail = false;
 			let halfY = Math.floor(this.y/2);
-			let randX = getRandomIntExc(0, this.x);
-			let randY = getRandomIntExc(0, halfY) + halfY;
+			let randX = utils.getRandomIntExc(0, this.x);
+			let randY = utils.getRandomIntExc(0, halfY) + halfY;
 			tile = this.getTile(randX, randY) as Tile;
 			neighbors = [this.getTile(Vector2D.add(tile.location, new Vector2D(-1,0))), this.getTile(Vector2D.add(tile.location, new Vector2D(1,0)))];
 			if (tile.type != TileType.empty) fail = true;
@@ -375,7 +576,7 @@ export class World {
 		
 		for (let x = locks; x < lockedDoors; x++) {
 			do {
-				tile = this.getTile(getRandomIntExc(0, this.x), getRandomIntExc(0, this.y)) as Tile;
+				tile = this.getTile(utils.getRandomIntExc(0, this.x), utils.getRandomIntExc(0, this.y)) as Tile;
 			}
 			while (tile?.type != TileType.empty)
 
@@ -384,7 +585,7 @@ export class World {
 
 		for (let x = 0; x < lockedDoors; x++) {
 			do {
-				tile = this.getTile(getRandomIntExc(0, this.x), getRandomIntExc(0, this.y)) as Tile;
+				tile = this.getTile(utils.getRandomIntExc(0, this.x), utils.getRandomIntExc(0, this.y)) as Tile;
 			}
 			while (tile?.type == TileType.locked)
 
@@ -406,18 +607,18 @@ export class World {
 			tile.type = TileType.storage;
 
 			// 1 big weapon
-			tile?.resources.push(new Weapon(getRandomInt(2,3)));
+			tile?.resources.push(new Weapon(utils.getRandomInt(3,4)));
 			// 2 keys
 			tile?.resources.push(new Key());
 			tile?.resources.push(new Key());
 			// 2 Healing
 			tile?.resources.push(new Healing(HealingType.firstaid));
-			tile?.resources.push(new Healing(getRandomInt(2,3) as HealingType));
+			tile?.resources.push(new Healing(utils.getRandomInt(2,3) as HealingType));
 			// 4 ammo
-			tile?.resources.push(new AmmoPile(getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(getRandomInt(0,3)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
 
 			tile.desc = "a storage room, there look to be lots of useful items here!";
 		}
@@ -477,23 +678,78 @@ export class World {
 		this.maxWeapons = max;
 		[this.x, this.y] = [x, y];
 		this.createWorld();
-		this.startingTile = this.getTile(getRandomIntExc(0,this.x), 0) as Tile;
+		this.startingTile = this.getTile(utils.getRandomIntExc(0,this.x), 0) as Tile;
 	}
 }
 
-function getRandomIntExc(min: number, max: number) {
-	return getRandomInt(min, max-1);
+export interface Commands {
+	[name: string]: Function;
 }
 
-// https://stackoverflow.com/a/18230432/2525751
-function getRandomInt(min: number, max: number): number {       
-    // Create byte array and fill with 1 random number
-    var byteArray = new Uint8Array(1);
-    window.crypto.getRandomValues(byteArray);
+export interface Command {
+	command: Function;
+	args: string[];
+}
 
-    var range = max - min + 1;
-    var max_range = 256;
-    if (byteArray[0] >= Math.floor(max_range / range) * range)
-        return getRandomInt(min, max);
-    return min + (byteArray[0] % range);
+export enum TurnState {
+	incomplete,
+	done
+}
+
+export class TurnManager {
+	actors: Actor[] = [];
+	currActor: Actor;
+	turn: number = 0;
+
+	public addActor(actor: Actor) {
+		this.actors.push(actor);
+	}
+
+	public takeTurn(command: Command) {
+		for (this.currActor of this.actors) {
+			let completed = this.currActor.turn(command.command, command.args);
+			if (!completed) break;
+		}
+	}
+
+	constructor(actors: Actor[]) {
+		this.actors.push(...actors);
+		this.currActor = this.actors[0];
+	}
+}
+
+export class Console {
+	private output: HTMLDivElement;
+	private input: HTMLInputElement;
+	private lastCommand: string = "";
+
+	public getUserInput() {
+		return this.input.value;
+	}
+
+	public clearUserInput() {
+		this.input.value = "";
+	}
+
+	public setLastCommand() {
+		this.input.value = this.lastCommand;
+	}
+
+	public printUserInput(text: string) {
+		this.lastCommand = text;
+		this.print(`> ${text}`)
+	}
+
+	public print(text: string) {
+		this.output.innerHTML += `<p>${text}</p>`;
+	}
+
+	public unknownCommand(command: string) {
+		this.print(`<p>I don't know what you mean: "${command}". Try typing "help" for a list of commands.</p>`);
+	}
+
+	constructor() {
+		this.output = dom.get("#out") as HTMLDivElement;
+		this.input = dom.get("#in") as HTMLInputElement;
+	}
 }
