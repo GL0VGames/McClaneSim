@@ -420,7 +420,7 @@ export class Actor {
 	}
 
 	public die() {
-		this.location.resources.push(...this.inventory.empty());
+		this.location.resources.push(...this.inventory.empty().filter(x => x.type != WeaponType.fist));
 	}
 
 	constructor(loc: Tile, health = 10, name: string = "placeholder") {

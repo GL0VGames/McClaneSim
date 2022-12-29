@@ -69,6 +69,7 @@ class Enemy extends Actor {
 		super(loc);
 		// Enemy.names.length - 2 to avoid Hans and Karl who are only spawned in the hostage room
 		this.name = name || Enemy.names[utils.getRandomIntExc(0, Enemy.names.length-2)];
+		this.inventory.add(new Key());
 	}
 }
 
@@ -129,7 +130,7 @@ class ActionManager {
 	console: Console;
 
 	public processCommand(input: string) {
-		let parts = input.replace(/\s+/g, " ").split(" ");
+		let parts = input.toLowerCase().replace(/\s+/g, " ").split(" ");
         let command = parts[0];
         let args = (parts.length > 1) ? parts.slice(1, parts.length) : [];
 
@@ -159,8 +160,8 @@ class ActionManager {
 			if(param.length >= 1)
 			{
 				if (param[0] == "navigation")
-						printString = "<b>go [left/right]</b>: Navigate between rooms on the same floor <br /><b>go [up/down]</b>: Navigate between floors in the presence of stairs  <br /><b>sneak [left/right/up/down]</b>: enter a room quietly (NOT IMPLEMENTED).  <br /><b>peek [left/right/up/down]</b>: Peek into the next room without entering it  <br /><b>wait</b>: Wait for one turn <br /><b>investigate/describe/desc [item/room/myself]</b>: Get more information about an item, the room you're in, or yourself.  <br /><b>pickup [item/all]</b>: Grab any or all collectable items in the current room  <br /><b>equip [weapon type]</b>: Equips the specified weapon type.<br /><b>reload</b>: Refills the weapon's magazine with the appropriate rounds (if you have them)<br /><b>unlock [left/right/up/down]</b>: Use up a key to unlock a door <br /><b>shoot [left/right/up/down]</b>: Use a bullet to loudly shoot out a lock";
-				else // "combat"
+						printString = "<b>go [left/right]</b>: Navigate between rooms on the same floor <br /><b>go [up/down]</b>: Navigate between floors in the presence of stairs  <br /><b>sneak [left/right/up/down]</b>: enter a room quietly (NOT IMPLEMENTED).  <br /><b>peek [left/right/up/down]</b>: Peek into the next room without entering it  <br /><b>wait</b>: Wait for one turn <br /><b>investigate/describe/desc [item/room/myself]</b>: Get more information about an item, the room you're in, or yourself.  <br /><b>pickup [item/all]</b>: Grab any or all collectable items in the current room  <br /><b>equip [weapon type]</b>: Equips the specified weapon type.<br /><b>reload</b>: Refills the weapon's magazine with the appropriate rounds (if you have them)<br /><b>unlock [left/right/up/down]</b>: Use up a key to unlock a door <br /><b>shoot [left/right/up/down]</b>: Use a bullet to loudly shoot out a lock <br /> <b>eat [food item]</b>: Eat food to regain health <br /><b>apply firstaid</b>: Apply a FirstAid kit to regain health.";
+				else if (param[0] == "combat")
 					printString = "<b>shoot</b>: Fire your gun at an enemy <br /><b>punch</b>: Punch an enemy <br /><b>duck/hide</b>: Take cover to avoid being shot <br /><b>reload</b>: Reload your gun inside or outside of combat <br /><b>run [left/right]</b>: Run from a fight into the specified room";
 			}
 			this.console.print(printString);
@@ -178,6 +179,7 @@ class ActionManager {
 		describe: (param:string[]) => {return this.investigate(param[0])},
 		desc: (param:string[]) => {return this.investigate(param[0])},
 		pickup: (param:string[]) => {return this.pickup(param[0])},
+		take: (param:string[]) => {return this.pickup(param[0])},
 		shoot: (param:string[]) => {return this.shoot(param)},
 		reload: (param:string[]) => {
 			let printString = "";
@@ -204,6 +206,23 @@ class ActionManager {
 		punch: (param:string[]) => {return this.punch(param[0])},
 		hit: (param:string[]) => {return this.punch(param[0])},
 		unlock: (param:string[]) => {return this.unlock(param)},
+		eat: (param:string[]) => {return this.consume(param)},
+		consume: (param:string[]) => {return this.consume(param)},
+		apply: (param:string[]) => {
+			if (param[0] == "office" || param[0] == "first" || param[0] == "aid") {
+				let firstaid = this.player.inventory.checkHealing(HealingType.firstaid) as Healing[];
+				if (firstaid.length) {
+					this.console.print(`You apply ${firstaid[0].desc} You regain ${firstaid[0].heal} hp.`);
+					this.player.heal(firstaid[0].heal);
+					this.player.inventory.remove(firstaid[0]);
+					return TurnState.done;
+				}
+				else {
+					this.console.print("You don't have any FirstAid kits to apply.");
+					return TurnState.incomplete;
+				}
+			}
+		},
 		//_: (param:string[]) => {},
 	}
 
@@ -269,10 +288,13 @@ class ActionManager {
                     returnString = "I'm sorry, the building has ceased to right.";
             }
 
-            if (returnString !== null) {
-				// Can't use playerLocation here because we updated the player's location in the above code
-                this.console.print(`${returnString} ${this.world.getLocationDesc(this.player.getLoc()) as string}.`);
-            }
+			let enemies = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
+			let enemyString = "";
+			if (enemies.length)
+				enemyString = ` There are ${enemies.length} guards in the room.`;
+
+			// Can't use playerLocation here because we updated the player's location in the above code
+			this.console.print(`${returnString} ${this.world.getLocationDesc(this.player.getLoc()) as string}. ${enemyString}`);
 
             if (this.player.getLocType() == TileType.hostage) {
                 this.console.print("hostage fight trigger. UNIMPLEMENTED")//triggerFight("hostage");
@@ -286,21 +308,31 @@ class ActionManager {
 		let printString = "Use 'peek [left/right/up/down]' to peek into the next room.";
 		let playerLoc = this.player.getLoc();
 		let playerType = this.player.getLocType();
+		let searchEnemies = (x: Actor) => x instanceof Enemy;
 
 		if ((direction == "left" || direction == "l")) {
 			let peekTile = this.world.getTile(Vector2D.add(playerLoc, new Vector2D(-1, 0)));
 			if (!peekTile) printString = "The building has ceased to left. You stare intently at the wall.";
 			else if (peekTile.type == TileType.locked)
-				printString = "You stare at a locked door. This would be easier if you unlocked the door.";
-			else
+			printString = "You stare at a locked door. This would be easier if you unlocked the door.";
+			else {
 				printString = `You peek into ${peekTile.desc}.`;
+				let enemies = this.actors.getByLocAndType(peekTile!.location, searchEnemies);
+				if (enemies.length)
+					printString += ` There are ${enemies.length} guards in the room.`;
+			}
 		}
 		else if ((direction == "right" || direction == "r")) {
 			let peekTile = this.world.getTile(Vector2D.add(playerLoc, new Vector2D(1, 0)));
 			if (!peekTile) printString = "The building has ceased to right. You stare intently at the wall.";
 			else if (peekTile.type == TileType.locked)
 				printString = "You stare at a locked door. This would be easier if you unlocked the door.";
-			else printString = `You peek into ${peekTile.desc}.`;
+			else {
+				printString = `You peek into ${peekTile.desc}.`;
+				let enemies = this.actors.getByLocAndType(peekTile!.location, searchEnemies);
+				if (enemies.length)
+					printString += ` There are ${enemies.length} guards in the room.`;
+			}
 		}
 		else if ((direction == "down" || direction == "d")) {
 			let peekTile = this.world.getTile(Vector2D.add(playerLoc, new Vector2D(0, -1)));
@@ -308,8 +340,12 @@ class ActionManager {
 				printString = `You peek into ${peekTile.desc}.`;
 			else if (!peekTile && playerType == TileType.stairUp)
 				printString = "The building has ceased to down. You stare intently at the floor.";
-			else
+			else {
 				printString = "There are no stairs here. You focus your mind on the floor but nothing happens.";
+				let enemies = this.actors.getByLocAndType(peekTile!.location, searchEnemies);
+				if (enemies.length)
+					printString += ` There are ${enemies.length} guards in the room.`;
+			}		
 		}
 		else if ((direction == "up" || direction == "u")) {
 			let peekTile = this.world.getTile(Vector2D.add(playerLoc, new Vector2D(0, 1)));
@@ -317,8 +353,12 @@ class ActionManager {
 				printString = `You peek into ${peekTile.desc}.`;
 			else if (!peekTile && playerType == TileType.stairDown)
 				printString = "The building has ceased to up. You stare intently at the ceiling.";
-			else
+			else {
 				printString = "There are no stairs here. You focus your mind on the ceiling but nothing happens.";
+				let enemies = this.actors.getByLocAndType(peekTile!.location, searchEnemies);
+				if (enemies.length)
+					printString += ` There are ${enemies.length} guards in the room.`;
+			}
 		}
 		this.console.print(printString);
 		return TurnState.incomplete;
@@ -357,6 +397,9 @@ class ActionManager {
 				printString += ".";
 			}
 			else printString += "a decorative plant.";
+			let enemies = this.actors.getByLocAndType(location.location, x => x instanceof Enemy);
+			if (enemies.length)
+				printString += ` There are ${enemies.length} guards in the room.`;
 		}
 
 		else if (param == "player" || param == "p" || param == "me" || param == "m" || param == "myself" || param == "self") {
@@ -477,7 +520,7 @@ class ActionManager {
 							damage = target.ducking ? damage / 2 : damage;
 							printString = `You shoot the terrorist ${target.name} and deal ${damage}. `;
 							if (target.health <= 0)
-								printString += `You kill ${target.name}.`;
+								printString += `You kill ${target.name} and he drops several items on the ground.`;
 						}
 						this.console.print(printString);
 						returnState = TurnState.done;
@@ -544,12 +587,10 @@ class ActionManager {
 				if (weapon.type == WeaponType.dualPistol9mm) 
 					printString = `You realize you have two pistols and two hands.` + printString;
 			}
+			else printString = `You fumble around in your pockets before realizing you don't have a spare ${param}.`;
 		}
-
-		if (weapon)
-			this.console.print(printString);
-		else this.console.print(`You fumble around in your pockets before realizing you don't have a spare ${param}.`);
-
+		
+		this.console.print(printString);
 		return TurnState.incomplete;
 	}
 
@@ -601,7 +642,7 @@ class ActionManager {
 					target.damage(fists.damage);
 					printString = `You punch the terrorist ${target.name} and deal ${fists.damage} damage.`;
 					if (target.health <= 0)
-						printString += ` You kill ${target.name}.`;
+						printString += ` You kill ${target.name} and he drops several items on the ground.`;
 					turnState = TurnState.done;
 				}
 			}
@@ -688,6 +729,52 @@ class ActionManager {
 		
 		this.console.print(printString);
 		return turnState;
+	}
+
+	private consume(param: string[]) {
+		if (param[0] == "chips" || param[0] == "bag") {
+			let chips = this.player.inventory.checkHealing(HealingType.chips) as Healing[];
+			if (chips.length) {
+				this.console.print(`You eat ${chips[0].desc}. You regain ${chips[0].heal} hp.`);
+				this.player.heal(chips[0].heal);
+				this.player.inventory.remove(chips[0]);
+				return TurnState.done;
+			}
+			else {
+				this.console.print("You don't have any bags of chips to eat!");
+				return TurnState.incomplete;
+			}
+		}
+		else if (param[0] == "apple") {
+			let apples = this.player.inventory.checkHealing(HealingType.apple) as Healing[];
+			if (apples.length) {
+				this.console.print(`You eat ${apples[0].desc}. You regain ${apples[0].heal} hp.`);
+				this.player.heal(apples[0].heal);
+				this.player.inventory.remove(apples[0]);
+				return TurnState.done;
+			}
+			else {
+				this.console.print("You don't have any apples to eat!");
+				return TurnState.incomplete;
+			}
+		}
+		else if (param[0] == "energy" || param[0] == "bar") {
+			let bars = this.player.inventory.checkHealing(HealingType.bar) as Healing[];
+			if (bars.length) {
+				this.console.print(`You eat ${bars[0].desc}. You regain ${bars[0].heal} hp.`);
+				this.player.heal(bars[0].heal);
+				this.player.inventory.remove(bars[0]);
+				return TurnState.done;
+			}
+			else {
+				this.console.print("You don't have any energy bars to eat!");
+				return TurnState.incomplete;
+			}
+		}
+		else {
+			this.console.print("Use 'eat [food item]' to eat food and regain health.");
+			return TurnState.incomplete
+		}
 	}
 
 	constructor(world: World, player: Player, actors: ActorManager, console: Console) {
