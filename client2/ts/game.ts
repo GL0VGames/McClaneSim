@@ -1,4 +1,4 @@
-import {World, Vector2D, AmmoPile, Weapon, Key, WeaponType, Tile, TileType, AmmoCaliber, Healing, HealingType, Actor, TurnState, TurnManager, Console, Command, Commands} from "./engine.js";
+import {World, Vector2D, AmmoPile, Weapon, Key, WeaponType, Tile, TileType, AmmoCaliber, Healing, HealingType, Actor, TurnState, TurnManager, Console, Command, Commands, ActorManager} from "./engine.js";
 import { dom, utils } from "./lib.js";
 
 //{ "x": 0, "y": 0, "keys": 0, "weapons": null, "weaponClip": 0, "ammo": 0, "health": 10, "stamina": 3, "inFight": false, "turn": false, "locState": "open", "target": null };
@@ -12,42 +12,53 @@ class Player extends Actor {
 
 	public equip(weaponType: WeaponType) {
 		let pistols = (this.inventory.checkWeapons(WeaponType.pistol9mm) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
+		let dualPistols = (this.inventory.checkWeapons(WeaponType.dualPistol9mm) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
 		let revolvers = (this.inventory.checkWeapons(WeaponType.revolver) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
 		let rifles = (this.inventory.checkWeapons(WeaponType.rifle) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
 		let shotguns = (this.inventory.checkWeapons(WeaponType.shotgun) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
 		let fists = (this.inventory.checkWeapons(WeaponType.fist) as Weapon[])?.filter(x=>x!=this.equippedWeapon) || [];
+		let equippedWeapon;
 		// check for dual pistols
 		if (weaponType == WeaponType.pistol9mm && this.equippedWeapon.type == WeaponType.pistol9mm && pistols.length >= 1) {
 			let dualPistols = this.inventory.createDualPistols(this.equippedWeapon, pistols[0]) as Weapon;
-			this.equippedWeapon = dualPistols;
+			equippedWeapon = dualPistols;
 		}
 		else if (weaponType == WeaponType.pistol9mm && pistols.length > 0)
-			this.equippedWeapon = pistols[0];
+			equippedWeapon = pistols[0];
+		else if (weaponType == WeaponType.dualPistol9mm && dualPistols.length > 0)
+			equippedWeapon = dualPistols[0];
 		else if (weaponType == WeaponType.revolver && revolvers.length > 0)
-			this.equippedWeapon = revolvers[0];
+			equippedWeapon = revolvers[0];
 		else if (weaponType == WeaponType.rifle && rifles.length > 0)
-			this.equippedWeapon = rifles[0];
+			equippedWeapon = rifles[0];
 		else if (weaponType == WeaponType.shotgun && shotguns.length > 0)
-			this.equippedWeapon = shotguns[0];
-		else this.equippedWeapon = fists[0];
+			equippedWeapon = shotguns[0];
+		else if (weaponType == WeaponType.fist) 
+			equippedWeapon = fists[0];
 		
-		return this.equippedWeapon;
+		if (equippedWeapon)
+			this.equippedWeapon = equippedWeapon;
+		
+		// Sending null indicates that the actor doesn't have the requested weapon	
+		return equippedWeapon;
 	}
 
 	public turn(action: Function, params: string[]) {
+		this.ducking = false;
 		return action(params);
 	};
 
 	constructor(loc: Tile, world: World) {
 		super(loc);
 		this.world = world;
-		
+		this.name = "Player"
 	}
 }
 
 class Enemy extends Actor {
 	private static names = ["Franco", "Tony", "Alexander", "Marco", "Kristoff", "Eddie", "Uli", "Heinrich", "Fritz", "James", "Theo", "Hans", "Karl"];
 	public turn() {
+		this.ducking = false;
 		console.log(`Test enemy ${this.name}'s turn!`);
 		return TurnState.done;
 	}
@@ -64,17 +75,17 @@ class Enemy extends Actor {
 class McClaneGame {
 	map: World;
 	player: Player;
-	actors: Actor[];
+	actors: ActorManager;
 	private actionManager: ActionManager;
 	private turnManager: TurnManager;
 	private console: Console;
 
 	constructor() {
-		this.map = new World(12, 12);
+		this.map = new World(8, 12);
 		this.player = new Player(this.map.startingTile, this.map);
 		let testEnemy1 = new Enemy(this.map.getTile(Vector2D.add(this.player.getLoc(), new Vector2D(0,1))) as Tile);
 		let testEnemy2 = new Enemy(this.map.getTile(Vector2D.add(this.player.getLoc(), new Vector2D(0,1))) as Tile);
-		this.actors = [this.player, testEnemy1, testEnemy2];
+		this.actors = new ActorManager([this.player, testEnemy1, testEnemy2]);
 
 		this.console = new Console();
 		// Print starting location
@@ -82,7 +93,7 @@ class McClaneGame {
 
 		// Turn management
 		this.turnManager = new TurnManager(this.actors);
-		this.actionManager = new ActionManager(this.map, this.player, this.actors.slice(1, this.actors.length), this.console);
+		this.actionManager = new ActionManager(this.map, this.player, this.actors, this.console);
 
 		// Respond to input
 		dom.get("#in")!.addEventListener("keydown", (e) => {
@@ -97,16 +108,24 @@ class McClaneGame {
 				else
 					this.console.unknownCommand(userInput);
 			}
-			else if (e.code == "ArrowUp") 
+			else if (e.code == "ArrowUp") {
+				e.preventDefault();
+				e.stopPropagation();
 				this.console.setLastCommand();
+			}
+			else if (e.code == "ArrowDown")
+				this.console.setNextCommand();
 		});
+		dom.get("html")!.addEventListener("click", e => {
+			dom.get("#in")!.focus();
+		})
 	}
 }
 
 class ActionManager {
 	world: World;
 	player: Player;
-	actors: Actor[];
+	actors: ActorManager;
 	console: Console;
 
 	public processCommand(input: string) {
@@ -129,7 +148,7 @@ class ActionManager {
 				}
 				else {
 					viewer.style.display = "grid";
-					this.world.viewWorld();
+					this.world.viewWorld(this.actors);
 					this.console.print("Map visible");
 				}
 			return TurnState.incomplete;
@@ -161,20 +180,39 @@ class ActionManager {
 		pickup: (param:string[]) => {return this.pickup(param[0])},
 		shoot: (param:string[]) => {return this.shoot(param)},
 		reload: (param:string[]) => {
-			let ammoPile = this.player.inventory.getAmmo(this.player.equippedWeapon.clip.caliber);
-			let reloaded = this.player.equippedWeapon.reload(ammoPile); 
-			this.console.print(`You put ${reloaded} rounds in your ${this.player.equippedWeapon.name}'s magazine.`);
+			let printString = "";
+			if (this.player.equippedWeapon.type != WeaponType.fist) {
+				let ammoPile = this.player.inventory.getAmmo(this.player.equippedWeapon.clip.caliber);
+				let reloaded = this.player.equippedWeapon.reload(ammoPile); 
+				printString = `You put ${reloaded} rounds in your ${this.player.equippedWeapon.name}'s magazine.`;
+				if (this.player.equippedWeapon.clip.currRounds == this.player.equippedWeapon.clip.maxRounds)
+					printString += ` You are fully loaded and ready for combat!  You have ${ammoPile.quantity} rounds left.`;
+				else if (ammoPile.quantity == 0 && reloaded > 0)
+					printString += " You are out of spares.";
+				if (reloaded == 0 && this.player.equippedWeapon.clip.currRounds == 0)
+					printString = `You eject your clip but realize you have no spare rounds to reload with. You hope your ${this.player.equippedWeapon.clip.currRounds} rounds will be enough.`;
+			}
+			else printString = "You can't reload your fists!";
+
+			this.console.print(printString);
 			return TurnState.incomplete;
 		},
 		equip: (param:string[]) => {return this.equip(param)},
-		_: (param:string[]) => {},
+		duck: (param:string[]) => {return this.duck()},	
+		hide: (param:string[]) => {return this.duck()},	
+		run: (param:string[]) => {return this.run(param[0])},
+		punch: (param:string[]) => {return this.punch(param[0])},
+		hit: (param:string[]) => {return this.punch(param[0])},
+		unlock: (param:string[]) => {return this.unlock(param)},
+		//_: (param:string[]) => {},
 	}
 
-	private direction(direction: string) {
+	private direction(direction: string, running = false) {
 		let playerLocation = this.player.getLoc();
 		let tileType = this.player.getLocType();
 		let turnState = TurnState.incomplete;
-        if (!this.player.inFight) {
+		let actors = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
+        if ((actors.length && running) || !actors.length) {
             var returnString = "Use 'go [left/right/up/down]' to move in that direction.";
             if (direction == "up" || direction == "u") {
                 if (tileType == TileType.stairUp || tileType == TileType.stairUpDown) {
@@ -240,7 +278,7 @@ class ActionManager {
                 this.console.print("hostage fight trigger. UNIMPLEMENTED")//triggerFight("hostage");
             }
         } else 
-            this.console.print("You cannot leisurely walk out of a fight! Try running out instead.");
+            this.console.print("There are enemies here, you cannot leisurely walk out of a fight! Try running out instead.");
 		return turnState;
     }
 
@@ -287,7 +325,7 @@ class ActionManager {
 	}
 
 	private investigate(param: string) {
-		let printString = "Use 'investigate [item/room/myself]' to get more information about an item, the room you're in, or yourself.";
+		let printString = "Use 'investigate [equipped/room/myself]' to get more information about an item, the room you're in, or yourself.";
 	
 		if (param == "room" || param == "location") {
 			let location = this.world.getTile(this.player.getLoc()) as Tile;
@@ -324,8 +362,8 @@ class ActionManager {
 		else if (param == "player" || param == "p" || param == "me" || param == "m" || param == "myself" || param == "self") {
 			let inv = this.player.inventory;
 			let [dualPistols, pistol, revolver, rifle, shotgun] = [(inv.checkWeapons(WeaponType.dualPistol9mm) as Weapon[]).length, (inv.checkWeapons(WeaponType.pistol9mm) as Weapon[]).length, (inv.checkWeapons(WeaponType.revolver) as Weapon[]).length, (inv.checkWeapons(WeaponType.rifle) as Weapon[]).length, (inv.checkWeapons(WeaponType.shotgun) as Weapon[]).length];
-			if (dualPistols) pistol += dualPistols * 2;
 			let weaponString = (pistol ? `${pistol} pistol(s), ` : "") + 
+			(dualPistols ? `${dualPistols} akimbo pistols, `: "") +
 			(revolver ? `${revolver} revolver(s), ` : "") +
 			(rifle ? `${rifle} rifle(s), ` : "") +
 			(shotgun ? `${shotgun} shotgun(s), ` : "");
@@ -349,6 +387,12 @@ class ActionManager {
 							${healingString.length ? healingString + "<br />" : ""}
 							and ${this.player.inventory.checkKeys()} keys.`;
 		}
+		else if (["equipped", "gun", "weapon", "item"].includes(param)) {
+			let equipped = this.player.equippedWeapon;
+			if (equipped.type != WeaponType.fist)
+				printString = `Your weapon has ${equipped.clip.currRounds}/${equipped.clip.maxRounds} rounds and deals ${equipped.damage} damage.`;
+			else printString = `You look at ${equipped.desc}`;
+		}
 
         this.console.print(printString);
 		return TurnState.incomplete;
@@ -368,7 +412,7 @@ class ActionManager {
 						tile?.remove(gun);
 					}
 				}
-				else printString = (param == "all") ? "" : "Ain't no guns here!";
+				else if (param != "all") printString = "Ain't no guns here!";
 			}
 			if (param == "ammo" || param == "all") {
 				let ammo = tile?.checkAmmo();
@@ -379,7 +423,7 @@ class ActionManager {
 						tile?.remove(amm);
 					}
 				}
-				else printString = (param == "all") ? "" : "Ain't no ammo here!";
+				else if (param != "all") printString = "Ain't no ammo here!";
 			}
 			if (param == "keys" || param == "key" || param == "all") {
 				let keys = tile?.checkKeys(true) as Key[];
@@ -390,7 +434,7 @@ class ActionManager {
 						tile?.remove(key);
 					}
 				}
-				else printString = (param == "all") ? "" : "Ain't no keys here!";
+				else if (param != "all") printString = "Ain't no keys here!";
 			}
 			if (param == "healing" || param == "all") {
 				let healing = tile?.checkHealing();
@@ -401,7 +445,7 @@ class ActionManager {
 						tile?.remove(heal);
 					}
 				}
-				else printString = (param == "all") ? "" : "Ain't no healing items here!";
+				else if (param != "all") printString = "Ain't no healing items here!";
 			}
 			if (!["guns", "gun", "ammo", "keys", "key", "healing", "all"].includes(param))
 				printString = "I regret to inform you that you can't take the furniture. Refer to the IKEA catalog to buy your own.";
@@ -414,29 +458,38 @@ class ActionManager {
 
 	private shoot(param: string[]) {
 		let printString = "Use 'shoot [enemy/terrorist/guard]' or 'shoot lock [dir]'";
+		let returnState = TurnState.incomplete;
 		if (this.player.inventory.checkWeapons() > 1) {
 			if (this.player.equippedWeapon.clip.currRounds > 0) {
 				if (Enemy.getNamesList().concat(["terrorist", "enemy", "baddie", "bad", "guard"]).includes(param[0])) {
-					let actors = this.actors.filter(x => Vector2D.equals(x.getLoc(), this.player.getLoc()));
+					let actors = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
 					if (actors.length) {
 						let target = actors[0];
-						this.player.equippedWeapon.shoot(target);
-						printString = `You shoot the terrorist ${target.name} and deal ${this.player.equippedWeapon.damage}. `;
-						if (target.health <= 0)
-							printString += `You kill the terrorist ${target.name}.`;
+						// 20% chance of missing
+						if (utils.getRandomInt(0,4) == 0) {
+							this.player.equippedWeapon.shoot();
+							let reasons = ["you can't quite get a steady aim", "you miscalculated wind resistance", "you underestimated how puffy their coat is", "you mixed Metric and Imperial units", "you slip on a banana peel", "you sneeze", "you have a tickle in your throat", "the sun was in your eyes", "you saw something shiny", "you couldn't see the North Star"];
+							printString = `You shoot at the terrorist ${target.name} but ${reasons[utils.getRandomIntExc(0,reasons.length)]} and your shot misses.`;
+						}
+						else {
+							this.player.equippedWeapon.shoot(target);
+							let damage = this.player.equippedWeapon.damage;
+							damage = target.ducking ? damage / 2 : damage;
+							printString = `You shoot the terrorist ${target.name} and deal ${damage}. `;
+							if (target.health <= 0)
+								printString += `You kill ${target.name}.`;
+						}
 						this.console.print(printString);
-						return TurnState.done;
+						returnState = TurnState.done;
 					}
 					else {
 						this.console.print("You whip your gun out and frantically point it around the empty room. There's no one to shoot. Don't waste your ammo.");
-						return TurnState.incomplete;
 					}
 				}
 				else if (param[0] == "lock") {
 					let currLoc = this.player.getLoc();
 					if (["up", "down"].includes(param[1])) {
 						this.console.print("There's no lock there. Don't waste your ammo.");
-						return TurnState.incomplete;
 					}
 					else if (param[1] == "left") {
 						let left = this.world.getTile(Vector2D.add(currLoc, new Vector2D(-1, 0)));
@@ -444,11 +497,10 @@ class ActionManager {
 							this.player.equippedWeapon.shoot();
 							left.type = TileType.empty;
 							this.console.print("With a loud bang you shoot out the lock. The door now swings unimpeded.");
-							return TurnState.done;
+							returnState = TurnState.done;
 						}
 						else {
 							this.console.print("There's no lock there. Don't waste your ammo.");
-							return TurnState.incomplete;
 						}
 					}
 					else if (param[1] == "right") {
@@ -457,51 +509,188 @@ class ActionManager {
 							this.player.equippedWeapon.shoot();
 							right.type = TileType.empty;
 							this.console.print("With a loud bang you shoot out the lock. The door now swings unimpeded.");
-							return TurnState.done;
+							returnState = TurnState.done;
 						}
-						else {
+						else
 							this.console.print("There's no lock there. Don't waste your ammo.");
-							return TurnState.incomplete;
-						}
 					}
-					else {
+					else
 						this.console.print(printString);
-						return TurnState.incomplete;
-					}
 				}
-				else {
+				else
 					this.console.print(printString);
-					return TurnState.incomplete;
-				}
 			}
-			else {
+			else
 				this.console.print("You pull the trigger, but nothing happens! Reload or find some bullets to shoot with.");
-				return TurnState.incomplete;
-			}
 		}
-		else {
+		else 
 			this.console.print("Spitballs are ineffective. Find a gun and bullets to shoot instead.");
-			return TurnState.incomplete;
-		}
+		
+		return returnState;
 	}
 
 	private equip(param: string[]) {
 		let printString = "Use 'equip [weapon]' to equip a weapon from your inventory.";
-		let weapon: Weapon = this.player.equippedWeapon;
-		if (["pistol", "revolver", "magnum", "rifle", "bullpup", "shotgun", "12", "12gauge", "fists", "fist"].includes(param[0])) {
+		let weapon;
+		if (["pistol", "akimbo", "revolver", "magnum", "rifle", "bullpup", "shotgun", "12", "12gauge", "fists", "fist"].includes(param[0])) {
 			if (param[0] == "pistol") weapon = this.player.equip(WeaponType.pistol9mm);
+			else if (param[0] == "akimbo") weapon = this.player.equip(WeaponType.dualPistol9mm);
 			else if (param[0] == "revolver" || param[0] == "magnum") weapon = this.player.equip(WeaponType.revolver);
 			else if (param[0] == "rifle" || param[0] == "bullpup") weapon = this.player.equip(WeaponType.rifle);
 			else if (param[0] == "shotgun" || param[0] == "12" || param[0] == "12gauge") weapon = this.player.equip(WeaponType.shotgun);
 			else if (param[0] == "fists" || param[0] == "fist") weapon = this.player.equip(WeaponType.fist);
-			printString = `You equip ${weapon?.desc}.`;
-			if (weapon.type == WeaponType.dualPistol9mm) printString = `You realize you have two pistols and two hands.` + printString;
+			if (weapon) {
+				printString = `You equip ${weapon?.desc}.`;
+				if (weapon.type == WeaponType.dualPistol9mm) 
+					printString = `You realize you have two pistols and two hands.` + printString;
+			}
 		}
-		this.console.print(printString);
+
+		if (weapon)
+			this.console.print(printString);
+		else this.console.print(`You fumble around in your pockets before realizing you don't have a spare ${param}.`);
+
 		return TurnState.incomplete;
 	}
 
-	constructor(world: World, player: Player, actors: Actor[], console: Console) {
+	private duck() {
+		let actors = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
+		if (actors.length) {
+			this.player.ducking = true;
+			this.console.print("You dive to the floor out of the way. You feel confident you're a smaller target.");
+			return TurnState.done;
+		}
+		else  {
+			this.console.print("... duck goose? There's nobody here...");
+			return TurnState.incomplete;
+		}
+	}
+
+	private run(param: string) {
+		if (["up", "u", "right", "r", "down", "d", "left", "l"].includes(param)) {
+			let actors = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
+			if (actors.length) {
+				let state = this.direction(param, true);
+				return state;
+			}
+			else {
+				this.console.print("There's nobody here to run from. Do your exercise later.");
+				return TurnState.incomplete;
+			}
+		}
+		else {
+			this.console.print("Use 'run [left/right/up/down]' to move in that direction.");
+			return TurnState.incomplete;
+		}
+	}
+
+	private punch(param: string) {
+		let printString = "Use 'punch [item/enemy/terrorist/guard]'.";
+		let turnState = TurnState.incomplete;
+		if (Enemy.getNamesList().concat(["terrorist", "enemy", "baddie", "bad", "guard"]).includes(param)) {
+			let actors = this.actors.getByLocAndType(this.player.getLoc(), x => x instanceof Enemy);
+			if (actors.length) {
+				let target = actors[0];
+				let fists = (this.player.inventory.checkWeapons(WeaponType.fist) as Weapon[])[0];
+				if (utils.getRandomInt(0,4) == 0) {
+					let reasons = ["you can't quite get a steady aim", "you miscalculated wind resistance", "you underestimated how puffy their coat is", "you mixed Metric and Imperial units", "you slip on a banana peel", "you sneeze", "you have a tickle in your throat", "the sun was in your eyes", "you saw something shiny", "you couldn't see the North Star"];
+					printString = `You punch at the terrorist ${target.name} but ${reasons[utils.getRandomIntExc(0,reasons.length)]} and you miss.`;
+					turnState = TurnState.done;
+				}
+				else {
+					target.damage(fists.damage);
+					printString = `You punch the terrorist ${target.name} and deal ${fists.damage} damage.`;
+					if (target.health <= 0)
+						printString += ` You kill ${target.name}.`;
+					turnState = TurnState.done;
+				}
+			}
+			else printString = "Punching the air will not make enemies appear.";
+		}
+		else if (param == "sofas")
+            printString = ("Wow, so soft.");
+        else if (param == "chairs")
+            printString = ("RESPECT THE CHAIRS, AND THE CHAIRS WILL RESPECT YOU");
+        else if (param == "tables")
+            printString = ("That's just great. Now where are we supposed to put things?");
+        else if (param == "desks")
+            printString = ("I'll have you know that those were artisanal.");
+        else if (param == "plants")
+            printString = ("PLANTS?!");
+        else if (param == "potato" || param == "chips")
+            printString = ("Crunchy.");
+        else if (param == "windows")
+            printString = ("Contrary to what you think, glass lacerations are NOT fun.");
+        else if (typeof param != "undefined")
+            printString = ("You get the feeling that this isn't helping anything.");
+
+		this.console.print(printString);
+		return turnState;
+	}
+
+	private unlock(param: string[]) {
+		let turnState = TurnState.incomplete;
+		let printString = "Use 'unlock [left/right/up/down]' to use up a key to unlock a door";
+		let playerLocation = this.player.getLoc();
+		let tileType = this.player.getLocType();
+		let key = this.player.inventory.getKey();
+		if (key) {
+			if (param[0] == "up" || param[0] == "u") {
+				if (tileType == TileType.stairUp || tileType == TileType.stairUpDown)
+					printString = "You instinctually try the handle only to find the door unlocked.";
+				else if (tileType == TileType.stairDown)
+					printString = "I'm sorry, the building has ceased to up.";
+				else
+					printString = "Unless you can phase through matter, you're not going that way.";
+			}
+			else if (param[0] == "down" || param[0] == "d") {
+				if (tileType == TileType.stairDown || tileType == TileType.stairUpDown)
+					printString = "You instinctually try the handle only to find the door unlocked.";
+				else if (tileType == TileType.stairUp)
+					printString = "I'm sorry, the building has ceased to down.";
+				else
+					printString = "Unless you can phase through matter, you're not going that way.";
+			}
+			else if (param[0] == "left" || param[0] == "l") {
+				let dir = new Vector2D(-1, 0);
+				let attemptLoc = this.world.getTile(Vector2D.add(playerLocation, dir));
+				if (attemptLoc) {
+					let attemptType = attemptLoc.type;
+					if (attemptType !== TileType.locked)
+						printString = "That door is already unlocked.";
+					else {
+						attemptLoc.type = TileType.empty;
+						this.player.inventory.remove(key);
+						printString = "You use a key and unlock the door.";
+					}
+				}
+				else
+					printString = "I'm sorry, the building has ceased to left.";
+			}
+			else if (param[0] == "right" || param[0] == "r") {
+				let dir = new Vector2D(1, 0);
+				let attemptLoc = this.world.getTile(Vector2D.add(playerLocation, dir));
+				if (attemptLoc) {
+					let attemptType = attemptLoc.type;
+					if (attemptType !== TileType.locked)
+						printString = "That door is already unlocked.";
+					else {
+						attemptLoc.type = TileType.empty;
+						this.player.inventory.remove(key);
+						printString = "You use a key and unlock the door.";
+					}
+				}
+				else
+					printString = "I'm sorry, the building has ceased to right.";
+			}
+		}
+		else printString = "You dig through you pockets just in case, but you don't have any keys.";
+		
+		this.console.print(printString);
+		return turnState;
+	}
+
+	constructor(world: World, player: Player, actors: ActorManager, console: Console) {
 		this.world = world;
 		this.player = player;
 		this.console = console;
@@ -511,5 +700,5 @@ class ActionManager {
 
 window.addEventListener('DOMContentLoaded', function() {
 	const game = new McClaneGame();
-    game.map.viewWorld();
+    game.map.viewWorld(game.actors);
 });

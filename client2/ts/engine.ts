@@ -94,7 +94,7 @@ export class Clip {
 	constructor(caliber: AmmoCaliber, maxRounds: number) {
 		this.caliber = caliber;
 		this.maxRounds = maxRounds;
-		this.currRounds = 0;
+		this.currRounds = utils.getRandomIntExc(0, this.maxRounds / 2);
 	}
 }
 
@@ -125,7 +125,8 @@ export class Weapon extends Resource {
 
 	public shoot(actor?: Actor) {
 		if (this.clip.currRounds > 0) {
-			if (actor) actor.damage(this.damage);
+			if (actor && !actor.ducking) actor.damage(this.damage);
+			else if (actor && actor.ducking) actor.damage(this.damage / 2);
 			this.clip.currRounds--;
 		}
 	}
@@ -138,40 +139,40 @@ export class Weapon extends Resource {
 			this.ammoCaliber = AmmoCaliber.p9mm;
 			this.damage = 10;
 			this.clip = new Clip(this.ammoCaliber, 20);
-			this.desc = "two small but dependable 9mm pistols, one for each hand."
+			this.desc = "two small but dependable 9mm pistols, one for each hand"
 		}
 		else if (this.type == WeaponType.pistol9mm) {
 			this.name = "pistol";
 			this.ammoCaliber = AmmoCaliber.p9mm;
 			this.damage = 5;
 			this.clip = new Clip(this.ammoCaliber, 10);
-			this.desc = "a small but dependable 9mm pistol."
+			this.desc = "a small but dependable 9mm pistol"
 		}
 		else if (this.type == WeaponType.revolver) {
 			this.name = "magnum revolver";
 			this.ammoCaliber = AmmoCaliber.p44Mag;
 			this.damage = 10;
 			this.clip = new Clip(this.ammoCaliber, 6);
-			this.desc = "a powerful magnum revolver."
+			this.desc = "a powerful magnum revolver"
 		}
 		else if (this.type == WeaponType.rifle) {
 			this.name = "bullpup rifle";
 			this.ammoCaliber = AmmoCaliber.r762NATO;
 			this.damage = 8;
 			this.clip = new Clip(this.ammoCaliber, 20);
-			this.desc = "a bullpup style rife, solid and dependable."
+			this.desc = "a bullpup style rife, solid and dependable"
 		}
 		else if (this.type == WeaponType.shotgun) {
 			this.name = "12 gauge shotgun";
 			this.ammoCaliber = AmmoCaliber.sh12gauge;
 			this.damage = 15;
 			this.clip = new Clip(this.ammoCaliber, 2);
-			this.desc = "a powerful, twin barrel shotgun."
+			this.desc = "a powerful, twin barrel shotgun"
 		}
 		else {//if (type == Weapons.fist) {
 			this.name = "angry fists";
 			this.damage = 3;
-			this.desc = "my own two fists.";
+			this.desc = "your own two fists";
 			this.ammoCaliber = AmmoCaliber.fist;
 			this.clip = new Clip(this.ammoCaliber, -1);
 		}
@@ -211,7 +212,7 @@ export class AmmoPile extends Resource {
 		else if (type == AmmoCaliber.fist) {
 			this.name = "fists";
 			this.quantity = 2;
-			this.desc = "my own two fists";
+			this.desc = "your own two fists";
 		}
 	}
 }
@@ -339,6 +340,11 @@ class Inventory {
 		return this.keys.length;
 	}
 
+	public getKey() {
+		if (this.keys.length)
+			return this.keys[0];
+;	}
+
 	public checkHealing(type?: HealingType) {
 		if (typeof type != "undefined") return this.healing.filter(x => x.type == type);
 		else return this.healing.length;
@@ -385,7 +391,7 @@ export class Actor {
 	health: number;
 	inventory: Inventory;
 	equippedWeapon: Weapon;
-	inFight: boolean = false;
+	ducking: boolean = false;
 
 	// TurnState helps to distinguish if the the action taken should count as a complete turn
 	// Malformed commands obviously do not count and certain actions are free (peaking, searching a room, picking items up, etc.)
@@ -468,6 +474,56 @@ export class World {
 			}
 		}
 
+		// Resources
+		// Weapons
+		let max = Math.round((this.x + this.y) / 2);
+		let randMaxWeapons = this.maxWeapons + utils.getRandomInt(-2, max);
+		for (let max = 0; max < randMaxWeapons; max++) {
+			let newTile = this.getTile(Vector2D.random(this.x, this.y));
+			// Only pistols spawn randomly
+			newTile?.resources.push(new Weapon(utils.getRandomInt(1,2)));
+		}
+
+		// Ammo
+		let randMaxAmmo = this.maxAmmo + utils.getRandomInt(-2, max);
+		for (let max = 0; max < randMaxAmmo; max++) {
+			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+		}
+
+		// Healing
+		let randMaxHealing = this.maxHealing + utils.getRandomInt(-2, max);
+		for (let x = 0; x < randMaxHealing; x++) {
+			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new Healing());
+		}
+
+		// Hostages
+		let hostageTile: Tile;
+		let neighbors: (Tile | null)[];
+		let fail: boolean;
+		do {
+			fail = false;
+			let halfY = Math.floor(this.y/2);
+			let randX = utils.getRandomIntExc(0, this.x);
+			let randY = utils.getRandomIntExc(0, halfY) + halfY;
+			hostageTile = this.getTile(randX, randY) as Tile;
+			neighbors = [this.getTile(Vector2D.add(hostageTile.location, new Vector2D(-1,0))), this.getTile(Vector2D.add(hostageTile.location, new Vector2D(1,0)))];
+			if (hostageTile.type != TileType.empty) fail = true;
+			//else if (neighbors[0] == null && neighbors[1]?.type != TileType.empty) fail = true;
+			//else if (neighbors[1] == null && neighbors[0]?.type != TileType.empty) fail = true;
+			else if (neighbors[0]?.type != TileType.empty || neighbors[1]?.type != TileType.empty) fail = true;
+		}
+		while (fail)
+
+		let locks = 0;
+		hostageTile.type = TileType.hostage;
+		hostageTile.desc = "a room. A WILD BUNDLE OF HOSTAGES (and two terrorists) APPEAR!"
+		for (let neighbor of neighbors)
+			if (neighbor instanceof Tile && neighbor.type == TileType.empty) {
+				neighbor.type = TileType.locked;
+				locks++;
+			}
+		let hostageTiles = [hostageTile.location.x-1, hostageTile.location.x, hostageTile.location.x+1];
+
 		// Stairs
 		let stairWells = 0;
 		if (this.x < 5)
@@ -502,7 +558,7 @@ export class World {
 				}
 				loc = tile.location;
 			}
-			while (tile.type != TileType.empty);
+			while (tile.type != TileType.empty || hostageTiles.includes(tile.location.x));
 			
 			tile.type = TileType.stairUp; 
 			tile.desc = "a stairwell with stairs leading up";
@@ -516,57 +572,9 @@ export class World {
 			newTile!.desc = "a stairwell with stairs going down";
 		}
 
-		// Resources
-		// Weapons
-		let max = Math.round((this.x + this.y) / 2);
-		let randMaxWeapons = this.maxWeapons + utils.getRandomInt(-2, max);
-		for (let max = 0; max < randMaxWeapons; max++) {
-			let newTile = this.getTile(Vector2D.random(this.x, this.y));
-			// Only pistols spawn randomly
-			newTile?.resources.push(new Weapon(utils.getRandomInt(1,2)));
-		}
-
-		// Ammo
-		let randMaxAmmo = this.maxAmmo + utils.getRandomInt(-2, max);
-		for (let max = 0; max < randMaxAmmo; max++) {
-			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
-		}
-
-		// Healing
-		let randMaxHealing = this.maxHealing + utils.getRandomInt(-2, max);
-		for (let x = 0; x < randMaxHealing; x++) {
-			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new Healing());
-		}
-
-		// Hostages
-		let tile: Tile;
-		let neighbors: (Tile | null)[];
-		let fail: boolean;
-		do {
-			fail = false;
-			let halfY = Math.floor(this.y/2);
-			let randX = utils.getRandomIntExc(0, this.x);
-			let randY = utils.getRandomIntExc(0, halfY) + halfY;
-			tile = this.getTile(randX, randY) as Tile;
-			neighbors = [this.getTile(Vector2D.add(tile.location, new Vector2D(-1,0))), this.getTile(Vector2D.add(tile.location, new Vector2D(1,0)))];
-			if (tile.type != TileType.empty) fail = true;
-			//else if (neighbors[0] == null && neighbors[1]?.type != TileType.empty) fail = true;
-			//else if (neighbors[1] == null && neighbors[0]?.type != TileType.empty) fail = true;
-			else if (neighbors[0]?.type != TileType.empty || neighbors[1]?.type != TileType.empty) fail = true;
-		}
-		while (fail)
-
-		let locks = 0;
-		tile.type = TileType.hostage;
-		tile.desc = "a room. A WILD BUNDLE OF HOSTAGES (and a terrorist) APPEARED!"
-		for (let neighbor of neighbors)
-			if (neighbor instanceof Tile && neighbor.type == TileType.empty) {
-				neighbor.type = TileType.locked;
-				locks++;
-			}
-
 		// Additional locked doors and keys
 		let lockedDoors = locks;
+		let tile: Tile;
 		if (this.x < 5)
 			lockedDoors += 0;
 		else if (this.x <= 10)
@@ -626,19 +634,21 @@ export class World {
 		return this.map;
 	}
 
-	public viewWorld(): void {
+	public viewWorld(actors: ActorManager): void {
 		dom.get("#worldViewer")!.style.gridTemplateColumns = `repeat(${this.x}, 2fr)`;
         dom.get("#worldViewer")!.textContent = "";
         for (var y: number = this.y - 1; y >= 0; y--) {
             var outP: string = "";
             for (var x: number = 0; x < this.x; x++) {
 				let tile = this.map[x][y];
+				let currActors = actors.getAll().filter(x => Vector2D.equals(x.getLoc(), tile.location));
+				let enemy = "tileType06";
 				let type = tile.type;
+				let classList = currActors.length ? enemy : "";
+				let content = "__";
 				if (type == TileType.empty) {
-					if (tile.resources.length == 0)
-						outP += `<span class='tileType01'>__</span>`;
-					else {
-						outP += "<span class='tileType01'>"
+					classList += " tileType01";
+					if (tile.resources.length > 0) {
 						let str = "";
 						for (let resource of tile.resources) {
 							if (resource instanceof Weapon)
@@ -652,20 +662,28 @@ export class World {
 						}
 						// To keep spacing accurate, we only show 2
 						if (str.length >= 2)
-							outP += str.slice(0, 2);
+							content = str.slice(0, 2);
 						else 
-							outP += `${str}_`;
-						outP += "</span>";
+							content = `${str}_`;
 					}
 				}
-				else if (type == TileType.storage)
-					outP += "<span class='tileType02'>SS</span>";
-				else if (type == TileType.hostage)
-					outP += "<span class='tileType05'>HH</span>";
-				else if (type == TileType.locked)
-					outP += "<span class='tileType04'>LL</span>";
-				else 
-					outP += "<span class='tileType03'>ST</span>";
+				else if (type == TileType.storage) {
+					classList += " tileType02";
+					content = "SS";
+				}
+				else if (type == TileType.hostage) {
+					classList += " tileType05";
+					content = "HH";
+				}
+				else if (type == TileType.locked) {
+					classList += " tileType04";
+					content = "LL";
+				}
+				else {
+					classList += " tileType03";
+					content = "ST";
+				}
+				outP += `<span class="${classList}">${content}</span>`;
             }
             dom.append("#worldViewer", outP);
         }
@@ -697,31 +715,56 @@ export enum TurnState {
 }
 
 export class TurnManager {
-	actors: Actor[] = [];
+	actors: ActorManager;
 	currActor: Actor;
 	turn: number = 0;
 
-	public addActor(actor: Actor) {
-		this.actors.push(actor);
-	}
-
 	public takeTurn(command: Command) {
-		for (this.currActor of this.actors) {
+		for (this.currActor of this.actors.getAll()) {
+			if (this.currActor.health <= 0) {
+				this.actors.remove(this.currActor);
+				continue;
+			}
 			let completed = this.currActor.turn(command.command, command.args);
 			if (!completed) break;
 		}
 	}
 
+	constructor(actors: ActorManager) {
+		this.actors = actors;
+		this.currActor = this.actors.getAll()[0];
+	}
+}
+
+export class ActorManager {
+	private actors: Actor[];
+
+	public getAll() {
+		return this.actors;
+	}
+
+	public getByLocAndType(loc: Vector2D, isType: (x:Actor)=>Boolean) {
+		return this.actors.filter(x => isType(x) && Vector2D.equals(x.getLoc(), loc));
+	}
+
+	public add(actor: Actor) {
+		this.actors.push(actor);
+	}
+
+	public remove(actor: Actor) {
+		utils.arrayRemove(actor, this.actors);
+	}
+
 	constructor(actors: Actor[]) {
-		this.actors.push(...actors);
-		this.currActor = this.actors[0];
+		this.actors = actors;
 	}
 }
 
 export class Console {
 	private output: HTMLDivElement;
 	private input: HTMLInputElement;
-	private lastCommand: string = "";
+	private lastCommand: string[] = [];
+	private lastCommandIndex: number = 0;
 
 	public getUserInput() {
 		return this.input.value;
@@ -732,11 +775,25 @@ export class Console {
 	}
 
 	public setLastCommand() {
-		this.input.value = this.lastCommand;
+		this.lastCommandIndex--;
+		if (this.lastCommandIndex < this.lastCommand.length * -1)
+			this.lastCommandIndex = -1;
+		this.input.value = this.lastCommand.at(this.lastCommandIndex) as string;
+		this.input.setSelectionRange(this.input.value.length, this.input.value.length);
+	}
+
+	public setNextCommand() {
+		this.lastCommandIndex++;
+		if (this.lastCommandIndex > 0)
+			this.lastCommandIndex = (this.lastCommand.length - 1) * -1;
+		this.input.value = this.lastCommand.at(this.lastCommandIndex) as string;
+		this.input.setSelectionRange(this.input.value.length, this.input.value.length);
 	}
 
 	public printUserInput(text: string) {
-		this.lastCommand = text;
+		if (this.lastCommand.at(-1) != text)
+			this.lastCommand.push(text);
+		this.lastCommandIndex = 0;
 		this.print(`> ${text}`)
 	}
 
