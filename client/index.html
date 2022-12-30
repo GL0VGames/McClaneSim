@@ -1,18 +1,22 @@
 <!DOCTYPE html>
-<!-- saved from url=(0041)http://damiankulp.com/gallery/mcclanesim/ -->
-<html lang="en" xmlns="http://www.w3.org/1999/xhtml"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
-        <!--<meta http-equiv="Content-Type" content="text/html; charset=utf-8" />-->
+<html lang="en">
+	<head>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>McClane Simulator</title>
-        <script type="text/javascript" src="http://code.jquery.com/jquery-2.1.1.min.js"></script>
-        <script type="text/javascript" src="./js/worldgen.js"></script>
-        <script type="text/javascript" src="./js/game.js"></script>
-        <script type="text/javascript" src="./js/workerInterface.js"></script>
+        <script src="./ts/lib.js" type="module"></script>
+        <script src="./ts/worldgen.js" type="module"></script>
+        <script src="./ts/game.js" type="module"></script>
         <link rel="stylesheet" type="text/css" href="./css/page.css">
     </head>
     <body>
-        <div id="out" style="bottom: 17px;"><p id="block0">Navigate the unfamiliar building to collect supplies and save the hostages. Don't get killed. <br> For a list of commands, type 'help navigation' or 'help combat'. <br> For those of you complaining about the broken level gen, I'm working on it!  <br> If you're curious to see the progress type "test 1" to try out the new gen in whatever state I currently have it in.  To go back to the old gen use "test 0".</p><p id="block1">You are in a room where there are sofas and stairs.</p></div>
+        <div id="out" ><p id="block0">Navigate the unfamiliar building to collect supplies and save the hostages. Don't get killed. <br /> For a list of commands, type 'help navigation' or 'help combat'. <br /></p></div>
         <div id="resources"></div>
-        <input id="in" autofocus="autofocus" tabindex="0">
-    
-
-</body></html>
+        <div id="worldViewer" style="display: none;"></div>
+		<div id="bottom">
+			<label for="in">Console Input</label>
+			<input id="in" autofocus="autofocus" tabindex="0" placeholder="command [parameters]" />
+		</div>
+		<div id="alert" style="display: none;"></div>
+	</body>
+</html>

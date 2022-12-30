@@ -21,20 +21,99 @@ body {
 }
 
 #in {
-    display: block;
-    position: fixed;
-    left: 0;
-    bottom: 0;
     width: 100%;
-    padding: 8px 0px 8px 8px;
+    padding: 8px 0px 8px 1.25em;
     border-color: #fff;
     border-width: 1px 0 0 0;
     background-color: #000;
     color: #0f0;
 }
 
+label {
+	display: none;
+}
+
+#in:focus-visible {
+	border-width: 1px 0 0 0;
+}
+
+#bottom {
+	display: block;
+    position: fixed;
+	border-color: #fff;
+    border-width: 1px 0 0 0;
+    left: 0;
+    bottom: 0;
+    width: 100%;
+}
+#bottom::before {
+	content: "\> ";
+	margin-bottom: -1.75em;
+    display: flex;
+    z-index: 100;
+    position: relative;
+    width: 1em;
+}
+
 #out
 {
     position: absolute;
     padding-bottom: 13px;
+	bottom: 17px;
+}
+
+#alert {
+	position: absolute;
+	width: 33%;
+	left: 33%;
+	top: calc(50% - 2.5em);
+	z-index: 1000;
+	background-color: #000;
+	font-size: 2em;
+	text-align: center;
+	padding: 1.5em;
+}
+
+.win {
+	color: #1decff;
+	border: 2px solid #1decff;
+}
+
+.lose {
+	color: #cf000f;
+	border: 2px solid #cf000f;
+}
+
+/* World Viewer */
+#worldViewer {
+	text-align: end;
+	display:grid;
+	row-gap: 5px;
+}
+#worldViewer span {
+	padding: 10px;
+	display:  inline-grid;
+}
+.tileType01 {
+	background-color: #000;
+	color:#fff;
+}
+.tileType02 {
+	background-color: #0055ba;
+	color:#fff;
+}
+.tileType03 {
+	background-color: #60bf8a;
+	color:#000;
+}
+.tileType04 {
+	background-color: #ffc480;
+	color:#000;
+}
+.tileType05 {
+	background-color: #cf000f;
+	color:#fff;
+}
+.tileType06 {
+	border: 2px solid #cf000f;
 }
