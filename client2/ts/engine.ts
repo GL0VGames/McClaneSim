@@ -278,7 +278,7 @@ export class Tile {
 	constructor(position: Vector2D) {
 		this.location = position;
 		this.type = TileType.empty;
-		this.desc = this.randDescriptions[utils.getRandomInt(0,2)];
+		this.desc = this.randDescriptions[utils.getRandomIntExc(0,this.randDescriptions.length)];
 		this.resources = [];
 	}
 }
@@ -325,7 +325,7 @@ class Inventory {
 
 	public checkWeapons(type?: WeaponType) {
 		if (typeof type != "undefined") return this.weapons.filter(x => x.type == type);
-		else return this.weapons.length;
+		else return this.weapons;
 	}
 
 	public checkAmmo(caliber: AmmoCaliber) {
@@ -385,6 +385,12 @@ class Inventory {
 	}
 }
 
+export enum MovementType {
+	walking,
+	running,
+	sneaking
+}
+
 export class Actor {
 	private location: Tile;
 	name: string;
@@ -392,10 +398,11 @@ export class Actor {
 	inventory: Inventory;
 	equippedWeapon: Weapon;
 	ducking: boolean = false;
+	sneaking: boolean = false;
 
 	// TurnState helps to distinguish if the the action taken should count as a complete turn
 	// Malformed commands obviously do not count and certain actions are free (peaking, searching a room, picking items up, etc.)
-	turn(_action:Function, _params:string[]) {console.error("Not Implemented"); return TurnState.done;};
+	turn(_action:Function, _params:string[], _actors:ActorManager) {console.error("Not Implemented"); return TurnState.done;};
 
 	public getLoc() {
 		return this.location.location;
@@ -415,12 +422,16 @@ export class Actor {
 
 	public damage(damage: number) {
 		this.health -= damage;
-		if (this.health < 0)
+		if (this.health <= 0)
 			this.die();
 	}
 
 	public die() {
+		this.ducking = false;
+		this.sneaking = false;
 		this.location.resources.push(...this.inventory.empty().filter(x => x.type != WeaponType.fist));
+		if (this.name == "Player")
+			document.dispatchEvent(new CustomEvent("PlayerDead"));
 	}
 
 	constructor(loc: Tile, health = 10, name: string = "placeholder") {
@@ -437,8 +448,10 @@ export class Actor {
 export class World {
 	public map: Tile[][] = [];
 	public startingTile: Tile;
-	private x: number;
-	private y: number;
+	//@ts-ignore - this is because we definitely call createWorld from the constructor but TS doesn't seem to know that.
+	public hostageTile: Tile;
+	public maxX: number;
+	public maxY: number;
 	private maxWeapons: number;
 	private maxAmmo: number;
 	private maxHealing: number;
@@ -467,33 +480,33 @@ export class World {
 	
 	public createWorld(): Tile[][] {
 		// Empty world
-		for (let x = 0; x < this.x; x++) {
+		for (let x = 0; x < this.maxX; x++) {
 			this.map[x] = [];
-			for (let y = 0; y < this.y; y++) {
+			for (let y = 0; y < this.maxY; y++) {
 				this.map[x][y] = new Tile(new Vector2D(x, y));
 			}
 		}
 
 		// Resources
 		// Weapons
-		let max = Math.round((this.x + this.y) / 2);
+		let max = Math.round((this.maxX + this.maxY) / 2);
 		let randMaxWeapons = this.maxWeapons + utils.getRandomInt(-2, max);
 		for (let max = 0; max < randMaxWeapons; max++) {
-			let newTile = this.getTile(Vector2D.random(this.x, this.y));
+			let newTile = this.getTile(Vector2D.random(this.maxX, this.maxY));
 			// Only pistols spawn randomly
-			newTile?.resources.push(new Weapon(utils.getRandomInt(1,2)));
+			newTile?.resources.push(new Weapon(utils.getRandomInt(WeaponType.pistol9mm,WeaponType.revolver)));
 		}
 
 		// Ammo
 		let randMaxAmmo = this.maxAmmo + utils.getRandomInt(-2, max);
 		for (let max = 0; max < randMaxAmmo; max++) {
-			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+			this.getTile(Vector2D.random(this.maxX, this.maxY))?.resources.push(new AmmoPile(utils.getRandomInt(AmmoCaliber.p9mm,AmmoCaliber.r762NATO)));
 		}
 
 		// Healing
 		let randMaxHealing = this.maxHealing + utils.getRandomInt(-2, max);
 		for (let x = 0; x < randMaxHealing; x++) {
-			this.getTile(Vector2D.random(this.x, this.y))?.resources.push(new Healing());
+			this.getTile(Vector2D.random(this.maxX, this.maxY))?.resources.push(new Healing());
 		}
 
 		// Hostages
@@ -502,8 +515,8 @@ export class World {
 		let fail: boolean;
 		do {
 			fail = false;
-			let halfY = Math.floor(this.y/2);
-			let randX = utils.getRandomIntExc(0, this.x);
+			let halfY = Math.floor(this.maxY/2);
+			let randX = utils.getRandomIntExc(0, this.maxX);
 			let randY = utils.getRandomIntExc(0, halfY) + halfY;
 			hostageTile = this.getTile(randX, randY) as Tile;
 			neighbors = [this.getTile(Vector2D.add(hostageTile.location, new Vector2D(-1,0))), this.getTile(Vector2D.add(hostageTile.location, new Vector2D(1,0)))];
@@ -516,7 +529,8 @@ export class World {
 
 		let locks = 0;
 		hostageTile.type = TileType.hostage;
-		hostageTile.desc = "a room. A WILD BUNDLE OF HOSTAGES (and two terrorists) APPEAR!"
+		hostageTile.desc = "a well barricaded room.";
+		this.hostageTile = hostageTile;
 		for (let neighbor of neighbors)
 			if (neighbor instanceof Tile && neighbor.type == TileType.empty) {
 				neighbor.type = TileType.locked;
@@ -526,11 +540,11 @@ export class World {
 
 		// Stairs
 		let stairWells = 0;
-		if (this.x < 5)
+		if (this.maxX < 5)
 			stairWells = 1;
-		else if (this.x <= 10)
+		else if (this.maxX <= 10)
 			stairWells = 2;
-		else if (this.x > 10)
+		else if (this.maxX > 10)
 			stairWells = 3;
 
 		for (let counter = 0; counter < stairWells; counter++) {
@@ -538,53 +552,53 @@ export class World {
 			let loc: Vector2D;
 			do {
 				if (stairWells == 1) {
-					tile = this.getTile(utils.getRandomIntExc(0, this.x), 0) as Tile;
+					tile = this.getTile(utils.getRandomIntExc(0, this.maxX), 0) as Tile;
 				}
 				else if (stairWells == 2) {
-					let half = Math.floor(this.x/2);
+					let half = Math.floor(this.maxX/2);
 					if (counter == 0)
 						tile = this.getTile(utils.getRandomIntExc(0, half), 0) as Tile;
 					else 
-						tile = this.getTile(utils.getRandomIntExc(half, this.x), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(half, this.maxX), 0) as Tile;
 				}
 				else {
-					let third = Math.floor(this.x/3);
+					let third = Math.floor(this.maxX/3);
 					if (counter == 0)
 						tile = this.getTile(utils.getRandomIntExc(0, third), 0) as Tile;
 					else if (counter == 1)
 						tile = this.getTile(utils.getRandomIntExc(third, third * 2), 0) as Tile;
 					else 
-						tile = this.getTile(utils.getRandomIntExc(third * 2, this.x), 0) as Tile;
+						tile = this.getTile(utils.getRandomIntExc(third * 2, this.maxX), 0) as Tile;
 				}
 				loc = tile.location;
 			}
 			while (tile.type != TileType.empty || hostageTiles.includes(tile.location.x));
 			
 			tile.type = TileType.stairUp; 
-			tile.desc = "a stairwell with stairs leading up";
-			for (let y = 1; y < this.y - 1; y++) {
+			tile.desc = "a stairwell with stairs leading up.";
+			for (let y = 1; y < this.maxY - 1; y++) {
 				let newTile = this.getTile(loc.x, y);
 				newTile!.type = TileType.stairUpDown;
-				newTile!.desc = "a stairwell with stairs going up and down";
+				newTile!.desc = "a stairwell with stairs going up and down.";
 			}
-			let newTile = this.getTile(loc.x, this.y-1);
+			let newTile = this.getTile(loc.x, this.maxY-1);
 			newTile!.type = TileType.stairDown;
-			newTile!.desc = "a stairwell with stairs going down";
+			newTile!.desc = "a stairwell with stairs going down.";
 		}
 
 		// Additional locked doors and keys
 		let lockedDoors = locks;
 		let tile: Tile;
-		if (this.x < 5)
+		if (this.maxX < 5)
 			lockedDoors += 0;
-		else if (this.x <= 10)
+		else if (this.maxX <= 10)
 			lockedDoors += 2;
-		else if (this.x > 10)
+		else if (this.maxX > 10)
 			lockedDoors += 3;
 		
 		for (let x = locks; x < lockedDoors; x++) {
 			do {
-				tile = this.getTile(utils.getRandomIntExc(0, this.x), utils.getRandomIntExc(0, this.y)) as Tile;
+				tile = this.getTile(utils.getRandomIntExc(0, this.maxX), utils.getRandomIntExc(0, this.maxY)) as Tile;
 			}
 			while (tile?.type != TileType.empty)
 
@@ -593,7 +607,7 @@ export class World {
 
 		for (let x = 0; x < lockedDoors; x++) {
 			do {
-				tile = this.getTile(utils.getRandomIntExc(0, this.x), utils.getRandomIntExc(0, this.y)) as Tile;
+				tile = this.getTile(utils.getRandomIntExc(0, this.maxX), utils.getRandomIntExc(0, this.maxY)) as Tile;
 			}
 			while (tile?.type == TileType.locked)
 
@@ -602,31 +616,31 @@ export class World {
 
 		// Storage
 		let maxStorage = 0;
-		if (this.x < 5)
+		if (this.maxX < 5)
 			maxStorage = 1;
-		else if (this.x <= 10)
+		else if (this.maxX <= 10)
 			maxStorage = 2;
-		else if (this.x > 10)
+		else if (this.maxX > 10)
 			maxStorage = 3;
 		for (let max = 0; max < maxStorage; max++) {
 			let tile: Tile;
-			do (tile = this.getTile(Vector2D.random(this.x, this.y)) as Tile)
+			do (tile = this.getTile(Vector2D.random(this.maxX, this.maxY)) as Tile)
 			while (tile.type != TileType.empty)
 			tile.type = TileType.storage;
 
 			// 1 big weapon
-			tile?.resources.push(new Weapon(utils.getRandomInt(3,4)));
+			tile?.resources.push(new Weapon(utils.getRandomInt(WeaponType.shotgun,WeaponType.rifle)));
 			// 2 keys
 			tile?.resources.push(new Key());
 			tile?.resources.push(new Key());
 			// 2 Healing
 			tile?.resources.push(new Healing(HealingType.firstaid));
-			tile?.resources.push(new Healing(utils.getRandomInt(2,3) as HealingType));
+			tile?.resources.push(new Healing(utils.getRandomInt(HealingType.bar,HealingType.firstaid) as HealingType));
 			// 4 ammo
-			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
-			tile?.resources.push(new AmmoPile(utils.getRandomInt(0,3)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(AmmoCaliber.p9mm,AmmoCaliber.r762NATO)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(AmmoCaliber.p9mm,AmmoCaliber.r762NATO)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(AmmoCaliber.p9mm,AmmoCaliber.r762NATO)));
+			tile?.resources.push(new AmmoPile(utils.getRandomInt(AmmoCaliber.p9mm,AmmoCaliber.r762NATO)));
 
 			tile.desc = "a storage room, there look to be lots of useful items here!";
 		}
@@ -635,11 +649,11 @@ export class World {
 	}
 
 	public viewWorld(actors: ActorManager): void {
-		dom.get("#worldViewer")!.style.gridTemplateColumns = `repeat(${this.x}, 2fr)`;
+		dom.get("#worldViewer")!.style.gridTemplateColumns = `repeat(${this.maxX}, 2fr)`;
         dom.get("#worldViewer")!.textContent = "";
-        for (var y: number = this.y - 1; y >= 0; y--) {
+        for (var y: number = this.maxY - 1; y >= 0; y--) {
             var outP: string = "";
-            for (var x: number = 0; x < this.x; x++) {
+            for (var x: number = 0; x < this.maxX; x++) {
 				let tile = this.map[x][y];
 				let currActors = actors.getAll().filter(x => Vector2D.equals(x.getLoc(), tile.location));
 				let enemy = "tileType06";
@@ -694,9 +708,9 @@ export class World {
 		this.maxAmmo = max;
 		this.maxHealing = max * 2;
 		this.maxWeapons = max;
-		[this.x, this.y] = [x, y];
+		[this.maxX, this.maxY] = [x, y];
 		this.createWorld();
-		this.startingTile = this.getTile(utils.getRandomIntExc(0,this.x), 0) as Tile;
+		this.startingTile = this.getTile(utils.getRandomIntExc(0,this.maxX), 0) as Tile;
 	}
 }
 
@@ -719,15 +733,27 @@ export class TurnManager {
 	currActor: Actor;
 	turn: number = 0;
 
+	private resetTurn(actors: ActorManager) {
+		for (let actor of actors.getAll()) {
+			actor.ducking = false;
+		}
+	}
+
 	public takeTurn(command: Command) {
 		for (this.currActor of this.actors.getAll()) {
-			if (this.currActor.health <= 0) {
+			if (this.currActor.health <= 0 && this.currActor.name == "Player") {
+				this.actors.removeAll();
+				break;
+			}
+			else if (this.currActor.health <= 0 && this.currActor.name != "Player") {
 				this.actors.remove(this.currActor);
 				continue;
 			}
-			let completed = this.currActor.turn(command.command, command.args);
+			
+			let completed = this.currActor.turn(command.command, command.args, this.actors);
 			if (!completed) break;
 		}
+		this.resetTurn(this.actors); 
 	}
 
 	constructor(actors: ActorManager) {
@@ -753,6 +779,10 @@ export class ActorManager {
 
 	public remove(actor: Actor) {
 		utils.arrayRemove(actor, this.actors);
+	}
+
+	public removeAll() {
+		this.actors = [];
 	}
 
 	constructor(actors: Actor[]) {

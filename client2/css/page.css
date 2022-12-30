@@ -29,6 +29,10 @@ body {
     color: #0f0;
 }
 
+label {
+	display: none;
+}
+
 #in:focus-visible {
 	border-width: 1px 0 0 0;
 }
@@ -55,6 +59,29 @@ body {
 {
     position: absolute;
     padding-bottom: 13px;
+	bottom: 17px;
+}
+
+#alert {
+	position: absolute;
+	width: 33%;
+	left: 33%;
+	top: calc(50% - 2.5em);
+	z-index: 1000;
+	background-color: #000;
+	font-size: 2em;
+	text-align: center;
+	padding: 1.5em;
+}
+
+.win {
+	color: #1decff;
+	border: 2px solid #1decff;
+}
+
+.lose {
+	color: #cf000f;
+	border: 2px solid #cf000f;
 }
 
 /* World Viewer */

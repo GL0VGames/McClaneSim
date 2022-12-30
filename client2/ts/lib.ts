@@ -19,6 +19,16 @@ export class utils {
 	static getRandomIntExc(min: number, max: number) {
 		return this.getRandomInt(min, max-1);
 	}
+	static alert(status: string) {
+		let alert = dom.get("#alert");
+		alert.classList.add(status);
+		if (status == "lose")
+			alert.textContent = "You lose. Next time, try to avoid running out of health.";
+		else if (status == "win")
+			alert.textContent = "You win. Hans and Karl are dead and the hostages have been saved.";
+		dom.get("#worldViewer").style.display = "none";
+		alert.style.display = "initial";
+	}
 	// https://stackoverflow.com/a/18230432/2525751
 	static getRandomInt(min: number, max: number): number {       
 		// Create byte array and fill with 1 random number
