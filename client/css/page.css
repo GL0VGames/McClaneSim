@@ -84,6 +84,29 @@ label {
 	border: 2px solid #cf000f;
 }
 
+#restart {
+	margin-top: 2em;
+    background-color: black;
+    color: inherit;
+    cursor: pointer;
+    border: inherit;
+}
+
+#restart:hover {
+	text-decoration: underline;
+}
+
+
+.lose #restart:active {
+	background-color: #cf000f;
+	color: #fff;
+}
+
+.win #restart:active {
+	background-color: #1decff;
+	color: #000;
+} 
+
 /* World Viewer */
 #worldViewer {
 	text-align: end;
@@ -116,4 +139,7 @@ label {
 }
 .tileType06 {
 	border: 2px solid #cf000f;
+}
+.tileType07 {
+	border: 2px solid #fff;
 }

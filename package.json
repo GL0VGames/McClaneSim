@@ -1,10 +1,12 @@
 {
   "name": "mcclanesim",
-  "version": "0.0.1",
-  "description": "Find and free the hostages!",
+  "version": "0.1.0",
+  "description": "Find and free the hostages. Don't die!",
   "main": "server.js",
   "scripts": {
-    "start": "gulp build:dev"
+    "start": "gulp build:dev",
+	"build:prod": "rimraf dist && gulp build:prod",
+	"prod": "npm run build:prod && node dist/server.js"
   },
   "repository": {
     "type": "git",
@@ -12,10 +14,20 @@
   },
   "author": "",
   "license": "ISC",
+  "type": "module",
   "dependencies": {
+    "browser-sync": "2.27.11",
+    "express": "4.18.2",
     "gulp": "4.0.2",
+    "gulp-minify-css": "1.2.4",
+    "gulp-minify-html": "1.0.6",
+    "gulp-sourcemaps": "3.0.0",
     "gulp-typescript": "6.0.0-alpha.1",
-	"gulp-sourcemaps": "3.0.0",
-	"browser-sync": "2.27.11"
+    "gulp-uglify": "3.0.2",
+    "path": "0.12.7",
+	"rimraf": "3.0.2"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.15"
   }
 }

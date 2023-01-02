@@ -1,32 +1,70 @@
-var gulp = require("gulp");
-var ts = require("gulp-typescript");
-var sourcemaps = require("gulp-sourcemaps");
-var browserSync = require("browser-sync").create();
+import gulpPkg from 'gulp';
+const { task, src: _src, dest, watch, series, parallel } = gulpPkg;
+import uglify from "gulp-uglify";
+import ts from "gulp-typescript";
+import sourceMapsPkg from "gulp-sourcemaps";
+const { init, write } = sourceMapsPkg;
+import minHTML from "gulp-minify-html";
+import minCSS from "gulp-minify-css";
+import {create} from "browser-sync";
+var browserSync = create();
+var src = "client/";
+var prod = false;
+var out = "dist/client/";
 
-gulp.task("ts", function () {
-	return gulp.src("client/ts/*.ts")
-		.pipe(sourcemaps.init())
-		.pipe(ts("./tsconfig.json"))
-		.pipe(sourcemaps.write(".", {sourceRoot: "client/ts"}))
-		.pipe(gulp.dest("client/ts"))
-		.pipe(browserSync.stream());
+task("ts", function () {
+	if (prod)
+		return _src(src+"ts/*.ts")
+			.pipe(ts("./tsconfig.json"))
+			.pipe(uglify())
+			.pipe(dest(out+"ts/"));
+	else
+		return _src("client/ts/*.ts")
+			.pipe(init())
+			.pipe(ts("./tsconfig.json"))
+			.pipe(write(".", {sourceRoot: "client/ts"}))
+			.pipe(dest("client/ts"))
+			.pipe(browserSync.stream());
 });
 
-gulp.task("html", function() {
-	return gulp.src("client/*.html")
-		.pipe(browserSync.stream());
-})
+task("html", function() {
+	if (prod)
+		return _src(src+"index.html")
+			.pipe(minHTML())
+			.pipe(dest(out));
+	else
+		return _src("client/*.html")
+			.pipe(browserSync.stream());
+});
 
-gulp.task("watch", function(cb) {
-	gulp.watch(["client/ts/*.ts"], gulp.series("ts"));
-	gulp.watch(["client/*.html"], gulp.series("html"));
+task("css", function (done) {
+	// Select the CSS, minify, and move to dist
+	if (prod)
+		return _src(src+"css/*.css")
+			.pipe(minCSS())
+			.pipe(dest(out+"css/"));
+	else done();
+});
+
+task("watch", function(cb) {
+	watch(["client/ts/*.ts"], series("ts"));
+	watch(["client/*.html"], series("html"));
 	cb();
 });
 
-gulp.task("start", function() {
+task("start", function() {
 	browserSync.init({
 		server: "./client/"
 	});
 });
 
-gulp.task("build:dev", gulp.series("ts", "watch", "start"));
+task("server", function() {
+	prod = true;
+	return _src("server.ts")
+			.pipe(ts("./tsconfig.json"))
+			.pipe(uglify())
+			.pipe(dest(out.split("/")[0]+"/"));
+});
+
+task("build:dev", series("ts", "watch", "start"));
+task("build:prod", series("server", parallel("html", "css", "ts")));

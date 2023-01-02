@@ -1,5 +1,6 @@
 import { dom, utils } from "./lib.js";
 
+// Basic 2D vector with accompanying helpers
 export class Vector2D {
 	x: number;
 	y: number;
@@ -20,6 +21,7 @@ export class Vector2D {
 	}
 }
 
+// Base class for all pickups: weapons, ammo, healing
 class Resource {
 	name: string = "";
 	desc: string = "";
@@ -27,12 +29,12 @@ class Resource {
 	constructor() {}
 }
 
+// Generally dumb, any key opens any door
 export class Key extends Resource {
-	//room: Tile;
 	private types = [
-		{name:"Rusty Key",desc:"A rusty key. Seems to be long forgotten."}, 
-		{name:"Good Key",desc:"A WeaponTypesteel key in good condition."}, 
-		{name:"Worn Key",desc:"A worn key - hopefully it still works!"}
+		{name:"Rusty Key",desc:"a rusty key which seems to have been long forgotten"}, 
+		{name:"Good Key",desc:"a steel key in good condition"}, 
+		{name:"Worn Key",desc:"a worn key - hopefully it still works"}
 	];
 	constructor() {
 		super();
@@ -49,17 +51,18 @@ export enum HealingType {
 	firstaid
 }
 
+// Chips, apples, and energy bars spawn around the building randomly, First Aid only spawns in storage rooms
 export class Healing extends Resource {
 	heal: number;
 	private types = {
 		[HealingType.chips]: {name:"chips",heal:2,desc:"a small package of low fat, baked chips"},
 		[HealingType.apple]:{name:"apple",heal:3,desc:"a firm, mostly red, medium-sized apple"},
 		[HealingType.bar]:{name:"energy bar",heal:4,desc:"a sealed energy bar, high in protein and sugar"},
-		[HealingType.firstaid]:{name:"office FirstAid kit",heal:10,desc:"a small FirstAid kit for office-type emergencies - it's nothing fancy, but the pack of gauze and adrenaline shot are helpful."}
+		[HealingType.firstaid]:{name:"office First Aid kit", heal:10, desc:"a small First Aid kit for office-type emergencies - it's nothing fancy, but the pack of gauze and adrenaline shot are helpful"}
 	};
 	constructor(_type?: HealingType) {
 		super();
-		// firstaid only spawns in storage rooms
+		// first aid only spawns in storage rooms
 		let healingType = _type || utils.getRandomIntExc(0, Object.keys(this.types).length - 1) as HealingType;
 		let type = this.types[healingType];
 		this.type = healingType;
@@ -86,6 +89,7 @@ export enum AmmoCaliber {
 	fist
 }
 
+// Only exist as part of a weapon
 export class Clip {
 	caliber: AmmoCaliber;
 	maxRounds: number;
@@ -98,6 +102,7 @@ export class Clip {
 	}
 }
 
+// Pistols are found around the building, rifles and shotguns only in storage rooms
 export class Weapon extends Resource {
 	ammoCaliber: AmmoCaliber;
 	damage: number;
@@ -179,9 +184,11 @@ export class Weapon extends Resource {
 	}
 }
 
+// Multi-purpose class, spawned around building randomly, also used as part of actor's inventories
 export class AmmoPile extends Resource {
 	caliber: AmmoCaliber;
 	quantity: number = 0;
+
 	constructor(type?: AmmoCaliber, resource: boolean = true) {
 		super();
 		this.caliber = type || utils.getRandomInt(0, 3) as AmmoCaliber;
@@ -227,6 +234,7 @@ export enum TileType {
 	locked
 }
 
+// Representation of a map tile, does not track actors on it
 export class Tile {
 	locked: boolean = false;
 	resources: (Key | Weapon | AmmoPile | Healing)[];
@@ -283,6 +291,7 @@ export class Tile {
 	}
 }
 
+// All actors have an inventory
 class Inventory {
 	private ammo: {[name:string]: AmmoPile};
 	private weapons: Weapon[] = [];
@@ -391,6 +400,7 @@ export enum MovementType {
 	sneaking
 }
 
+// Base class for everything that moves in the game
 export class Actor {
 	private location: Tile;
 	name: string;
@@ -445,11 +455,11 @@ export class Actor {
 	}
 }
 
+// The actual array of tiles representing the world
 export class World {
 	public map: Tile[][] = [];
 	public startingTile: Tile;
-	//@ts-ignore - this is because we definitely call createWorld from the constructor but TS doesn't seem to know that.
-	public hostageTile: Tile;
+	public hostageTile!: Tile;
 	public maxX: number;
 	public maxY: number;
 	private maxWeapons: number;
@@ -656,9 +666,11 @@ export class World {
             for (var x: number = 0; x < this.maxX; x++) {
 				let tile = this.map[x][y];
 				let currActors = actors.getAll().filter(x => Vector2D.equals(x.getLoc(), tile.location));
+				let player = "tileType07";
 				let enemy = "tileType06";
 				let type = tile.type;
-				let classList = currActors.length ? enemy : "";
+				let classList = currActors.filter(x => x.name != "Player").length ? enemy : "";
+				classList += currActors.filter(x => x.name == "Player").length ? ` ${player}` : "";
 				let content = "__";
 				if (type == TileType.empty) {
 					classList += " tileType01";
@@ -728,6 +740,9 @@ export enum TurnState {
 	done
 }
 
+// Handles giving each actor their turn
+// Rounds start with the player
+// Rounds are initiated with the user hits enter and a valid instruction is given
 export class TurnManager {
 	actors: ActorManager;
 	currActor: Actor;
@@ -762,6 +777,7 @@ export class TurnManager {
 	}
 }
 
+// Keeps track of all actors in the game
 export class ActorManager {
 	private actors: Actor[];
 
@@ -790,6 +806,7 @@ export class ActorManager {
 	}
 }
 
+// Handles input and output for the game
 export class Console {
 	private output: HTMLDivElement;
 	private input: HTMLInputElement;
@@ -833,6 +850,13 @@ export class Console {
 
 	public unknownCommand(command: string) {
 		this.print(`<p>I don't know what you mean: "${command}". Try typing "help" for a list of commands.</p>`);
+	}
+
+	public hardClear() {
+		this.output.innerHTML = "";
+		this.input.value = "";
+		this.lastCommand = [];
+		this.lastCommandIndex = 0;
 	}
 
 	constructor() {

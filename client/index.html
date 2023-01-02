@@ -3,20 +3,21 @@
 	<head>
 		<meta charset="utf-8">
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<meta name="description" content="Text-based McClane Simulator. Navigate the building, collect resources, save the hostages, and don't die!">
         <title>McClane Simulator</title>
         <script src="./ts/lib.js" type="module"></script>
-        <script src="./ts/worldgen.js" type="module"></script>
+        <script src="./ts/engine.js" type="module"></script>
         <script src="./ts/game.js" type="module"></script>
         <link rel="stylesheet" type="text/css" href="./css/page.css">
     </head>
     <body>
-        <div id="out" ><p id="block0">Navigate the unfamiliar building to collect supplies and save the hostages. Don't get killed. <br /> For a list of commands, type 'help navigation' or 'help combat'. <br /></p></div>
+        <div id="out"></div>
         <div id="resources"></div>
         <div id="worldViewer" style="display: none;"></div>
 		<div id="bottom">
 			<label for="in">Console Input</label>
 			<input id="in" autofocus="autofocus" tabindex="0" placeholder="command [parameters]" />
 		</div>
-		<div id="alert" style="display: none;"></div>
+		<div id="alert" style="display: none;"><div id="alertBody"></div><button id="restart">restart</button></div>
 	</body>
 </html>

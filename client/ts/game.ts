@@ -1,7 +1,7 @@
 import {World, Vector2D, AmmoPile, Weapon, Key, WeaponType, Tile, TileType, AmmoCaliber, Healing, HealingType, Actor, TurnState, TurnManager, Console, Command, Commands, ActorManager, MovementType} from "./engine.js";
 import { dom, utils } from "./lib.js";
 
-//{ "x": 0, "y": 0, "keys": 0, "weapons": null, "weaponClip": 0, "ammo": 0, "health": 10, "stamina": 3, "inFight": false, "turn": false, "locState": "open", "target": null };
+// The player, identified in engine by actor.name == "Player"
 class Player extends Actor {
 	world: World;
 
@@ -56,6 +56,8 @@ class Player extends Actor {
 	}
 }
 
+// Enemies except Hans and Karl will walk around and shoot the player on sight
+// Hans and Karl stay to guard the prisoners
 class Enemy extends Actor {
 	private static names = ["Franco", "Tony", "Alexander", "Marco", "Kristoff", "Eddie", "Uli", "Heinrich", "Fritz", "James", "Theo", "Hans", "Karl"];
 	private turnCounter: number;
@@ -188,15 +190,19 @@ class Enemy extends Actor {
 	}
 }
 
+// Main source for game
 class McClaneGame {
-	map: World;
-	player: Player;
-	actors: ActorManager;
-	private actionManager: ActionManager;
-	private turnManager: TurnManager;
+	map!: World;
+	player!: Player;
+	actors!: ActorManager;
+	private actionManager!: ActionManager;
+	private turnManager!: TurnManager;
 	private console: Console;
 
 	public spawnEnemies(total: number) {
+		// Normal guards have lower health and only carry pistols.
+		// Hans and Karl have boosted health and carry a rifle and a pistol.
+
 		// Patrolling guards
 		for (let curr = 0; curr < total; curr++) {
 			let randTile = this.map.getTile(new Vector2D(utils.getRandomIntExc(0, this.map.maxX), utils.getRandomIntExc(1, this.map.maxY))) as Tile;
@@ -209,6 +215,7 @@ class McClaneGame {
 		hansGun.clip.currRounds = hansGun.clip.maxRounds;
 		hans.inventory.add(hansGun);
 		hans.equippedWeapon = hansGun;
+		hans.health = 15;
 		this.actors.add(hans);
 
 		// Karl
@@ -217,13 +224,13 @@ class McClaneGame {
 		karlGun.clip.currRounds = karlGun.clip.maxRounds;
 		karl.inventory.add(karlGun);
 		karl.equippedWeapon = karlGun;
+		karl.health = 15;
 		this.actors.add(karl);
 	}
 
 	public keyDown(e: KeyboardEvent) {
-		let userInput = "";
 		if (e.code == "Enter") {
-			userInput = this.console.getUserInput();
+			let userInput = this.console.getUserInput();
 			this.console.printUserInput(userInput);
 			this.console.clearUserInput();
 			let command = this.actionManager.processCommand(userInput);
@@ -246,8 +253,7 @@ class McClaneGame {
 			this.console.setNextCommand();
 	}
 
-	constructor() {
-		this.console = new Console();
+	public newGame() {
 		this.map = new World(8, 12);
 		this.player = new Player(this.map.startingTile, this.map);
 		this.actors = new ActorManager([this.player]);
@@ -260,6 +266,19 @@ class McClaneGame {
 		this.turnManager = new TurnManager(this.actors);
 		this.actionManager = new ActionManager(this.map, this.player, this.actors, this.console);
 
+		// Required if coming from game over
+		(dom.get("#in") as HTMLInputElement).disabled = false;
+		this.console.hardClear();
+		
+		// Starting text
+		this.console.print("Navigate the unfamiliar building to collect supplies and save the hostages. Don't get killed.");
+		this.console.print("For a list of commands, type 'help navigation' or 'help combat'.");
+	}
+
+	constructor() {
+		this.console = new Console();
+		this.newGame();
+
 		// Respond to input
 		dom.get("#in")!.addEventListener("keydown", e => this.keyDown(e)); 
 
@@ -270,7 +289,6 @@ class McClaneGame {
 
 		// Game over
 		document.addEventListener("PlayerDead", e => {
-			this.keyDown = () => {};
 			(dom.get("#in") as HTMLInputElement).disabled = true;
 			this.turnManager = new TurnManager(new ActorManager([]));
 			utils.alert("lose");
@@ -278,14 +296,14 @@ class McClaneGame {
 
 		// Win
 		document.addEventListener("PlayerWin", e => {
-			this.keyDown = () => {};
 			(dom.get("#in") as HTMLInputElement).disabled = true;
 			this.turnManager = new TurnManager(new ActorManager([]));
 			utils.alert("win");
 		})
 	}
 }
-	
+
+// Action Manager is the dump of all available commands
 class ActionManager {
 	world: World;
 	player: Player;
@@ -305,7 +323,7 @@ class ActionManager {
 	public commands: Commands = {
 		dev: (param:string[]) => {
 			let viewer = dom.get("#worldViewer");
-			if (param[0] == "map")
+			if (param[0] == "map") {
 				if (viewer.style.display != "none") {
 					viewer.style.display = "none";
 					this.console.print("Map hidden");
@@ -315,6 +333,8 @@ class ActionManager {
 					this.world.viewWorld(this.actors);
 					this.console.print("Map visible");
 				}
+			}
+			else this.console.print(`I don't know what you mean: "dev". Try typing "help" for a list of commands.`);
 			return TurnState.incomplete;
 		},
 		help: (param: string[]) => {
@@ -337,7 +357,7 @@ class ActionManager {
 						<b>unlock [left/right/up/down]</b>: Use up a key to unlock a door <br />
 						<b>shoot [left/right/up/down]</b>: Use a bullet to loudly shoot out a lock <br /> 
 						<b>eat [food item]</b>: Eat food to regain health <br />
-						<b>apply [firstaid]</b>: Apply a FirstAid kit to regain health`;
+						<b>apply [first aid]</b>: Apply a First Aid kit to regain health`;
 				else if (param[0] == "combat")
 					printString = `
 						<b>shoot [guard/terrorist/baddie]</b>: Fire your gun at an enemy. Breaks stealth <br />
@@ -427,7 +447,7 @@ class ActionManager {
 					return TurnState.done;
 				}
 				else {
-					this.console.print("You don't have any FirstAid kits to apply.");
+					this.console.print("You don't have any First Aid kits to apply.");
 					return TurnState.incomplete;
 				}
 			}
@@ -582,7 +602,7 @@ class ActionManager {
 	}
 
 	private investigate(param: string) {
-		let printString = "Use 'investigate [equipped/room/myself]' to get more information about an item, the room you're in, or yourself.";
+		let printString = "Use 'investigate [equipped/item/room/myself]' to get more information about an item, the room you're in, or yourself.";
 	
 		if (param == "room" || param == "location") {
 			let location = this.world.getTile(this.player.getLoc()) as Tile;
@@ -618,7 +638,6 @@ class ActionManager {
 			if (enemies.length)
 				printString += ` There are ${enemies.length} guards in the room.`;
 		}
-
 		else if (param == "player" || param == "p" || param == "me" || param == "m" || param == "myself" || param == "self") {
 			let inv = this.player.inventory;
 			let [dualPistols, pistol, revolver, rifle, shotgun] = [(inv.checkWeapons(WeaponType.dualPistol9mm) as Weapon[]).length, (inv.checkWeapons(WeaponType.pistol9mm) as Weapon[]).length, (inv.checkWeapons(WeaponType.revolver) as Weapon[]).length, (inv.checkWeapons(WeaponType.rifle) as Weapon[]).length, (inv.checkWeapons(WeaponType.shotgun) as Weapon[]).length];
@@ -638,7 +657,7 @@ class ActionManager {
 			let healingString = (chips ? `${chips} bag(s) of chips, ` : "") + 
 			(apples ? `${apples} apple(s), ` : "") +
 			(bars ? `${bars} energy bar(s), ` : "") +
-			(firstaid ? `${firstaid} FirstAid kit(s), ` : "");
+			(firstaid ? `${firstaid} First Aid kit(s), ` : "");
 
 			printString = `You have:<br />
 							${this.player.health} health,</br />
@@ -647,13 +666,101 @@ class ActionManager {
 							${healingString.length ? healingString + "<br />" : ""}
 							and ${this.player.inventory.checkKeys()} keys.`;
 		}
-		else if (["equipped", "gun", "weapon", "item"].includes(param)) {
+		else if (["equipped", "gun", "weapon"].includes(param)) {
 			let equipped = this.player.equippedWeapon;
 			if (equipped.type != WeaponType.fist)
-				printString = `Your weapon has ${equipped.clip.currRounds}/${equipped.clip.maxRounds} rounds and deals ${equipped.damage} damage.`;
+				printString = `Your weapon has ${equipped.clip.currRounds}/${equipped.clip.maxRounds} rounds of ${this.player.inventory.getAmmo(equipped.ammoCaliber).name} and deals ${equipped.damage} damage.`;
 			else printString = `You look at ${equipped.desc}`;
 		}
-
+		else if (["pistol", "handgun"].includes(param)) {
+			let pistols = this.player.inventory.checkWeapons(WeaponType.pistol9mm);
+			if (pistols.length)
+				printString = `You have ${pistols[0].desc} which deals ${pistols[0].damage} damage.`;
+			else printString = "You don't have any pistols!";
+		}
+		else if (["akimbo", "pistols", "dual"].includes(param)) {
+			let akimboPistols = this.player.inventory.checkWeapons(WeaponType.dualPistol9mm);
+			if (akimboPistols.length)
+				printString = `You have ${akimboPistols[0].desc} which deal ${akimboPistols[0].damage} damage total.`;
+			else printString = "You don't have any akimbo pistols! Find two pistols and equip them both.";
+		}
+		else if (["revolver", "magnum"].includes(param)) {
+			let revolvers = this.player.inventory.checkWeapons(WeaponType.revolver);
+			if (revolvers.length)
+				printString = `You have ${revolvers[0].desc} which deals ${revolvers[0].damage} damage.`;
+			else printString = "You don't have any revolvers!";
+		}
+		else if (["shotgun"].includes(param)) {
+			let shotguns = this.player.inventory.checkWeapons(WeaponType.shotgun);
+			if (shotguns.length)
+				printString = `You have ${shotguns[0].desc} which deals ${shotguns[0].damage} damage.`;
+			else printString = "You don't have any shotguns!";
+		}
+		else if (["rifle", "bullpup"].includes(param)) {
+			let rifles = this.player.inventory.checkWeapons(WeaponType.rifle);
+			if (rifles.length)
+				printString = `You have ${rifles[0].desc} which deals ${rifles[0].damage} damage.`;
+			else printString = "You don't have any rifles!";
+		}
+		else if (["fist", "fists"].includes(param)) {
+			let fists = this.player.inventory.checkWeapons(WeaponType.fist);
+			if (fists.length)
+				printString = `You have ${fists[0].desc} which deal ${fists[0].damage} damage.`;
+			else printString = "You don't have any rifles!";
+		}
+		else if (["chips", "bag"].includes(param)) {
+			let chips = (this.player.inventory.checkHealing(HealingType.apple) as Healing[]);
+			if (chips.length)
+				printString = `You look at ${chips[0].desc}. It will give you ${chips[0].heal} health.`;
+				else printString = "You don't have any chips!";
+		}
+		else if (["apple"].includes(param)) {
+			let apples = (this.player.inventory.checkHealing(HealingType.apple) as Healing[]);
+			if (apples.length)
+				printString = `You look at ${apples[0].desc}. It will give you ${apples[0].heal} health.`;
+				else printString = "You don't have any apples!";
+		}
+		else if (["bar", "energy"].includes(param)) {
+			let bars = (this.player.inventory.checkHealing(HealingType.bar) as Healing[]);
+			if (bars.length)
+				printString = `You look at ${bars[0].desc}. It will give you ${bars[0].heal} health.`;
+				else printString = "You don't have any energy bars!";
+		}
+		else if (["first", "aid", "firstaid"].includes(param)) {
+			let firstAid = (this.player.inventory.checkHealing(HealingType.firstaid) as Healing[]);
+			if (firstAid.length)
+				printString = `You look at ${firstAid[0].desc}. It will give you ${firstAid[0].heal} health.`;
+			else printString = "You don't have any first aid kits!";
+		}
+		else if (param == "key") {
+			if (this.player.inventory.checkKeys())
+				printString = `You look at ${this.player.inventory.getKey()?.desc}. This will probably open a door.`;
+			else printString = "You don't have any keys!";
+		}
+		else if (["9mm", "9"].includes(param)) {
+			let p9mm = this.player.inventory.getAmmo(AmmoCaliber.p9mm);
+			if (p9mm.quantity)
+				printString = `You have ${p9mm.desc} containing ${p9mm.quantity} rounds. These can be used in any small pistol.`;
+				else printString = "You don't have any 9mm rounds.";
+		}
+		else if ([".44"].includes(param)) {
+			let p44mag = this.player.inventory.getAmmo(AmmoCaliber.p44Mag);
+			if (p44mag.quantity)
+				printString = `You have ${p44mag.desc} containing ${p44mag.quantity} rounds. These can be used in any large magnum revolver.`;
+				else printString = "You don't have any .44 Magnum rounds.";
+		}
+		else if (["12", "12gauge"].includes(param)) {
+			let sh12gauge = this.player.inventory.getAmmo(AmmoCaliber.sh12gauge);
+			if (sh12gauge.quantity)
+				printString = `You have ${sh12gauge.desc} containing ${sh12gauge.quantity} rounds. These can be used in any shotgun.`;
+				else printString = "You don't have any 12 gauge rounds.";
+		}
+		else if (["7.62x51mm", "nato", "7.62"].includes(param)) {
+			let r762Nato = this.player.inventory.getAmmo(AmmoCaliber.r762NATO);
+			if (r762Nato.quantity)
+				printString = `You have ${r762Nato.desc} containing ${r762Nato.quantity} rounds. These can be used in any rifle.`;
+				else printString = "You don't have any 7.62x51mm NATO.";
+		}
 		this.console.print(printString);
 		return TurnState.incomplete;
 	}
@@ -1024,7 +1131,13 @@ class ActionManager {
 	}
 }
 
+// Run game when page loads
 window.addEventListener('DOMContentLoaded', function() {
-	const game = new McClaneGame();
-	game.map.viewWorld(game.actors);
+	let game = new McClaneGame();
+
+	dom.get("#restart").addEventListener("click", e => {
+		game.newGame();
+		dom.get("#alert").style.display = "none";
+		dom.get("#worldViewer").style.display = "none";
+	});
 });
