@@ -1,10 +1,10 @@
 # McClane Simulator
 
-A text-based adventure where you get to be John McClane and saved the day in a procedurally generated world!
+A text-based adventure where you get to be John McClane and saved the day in a procedurally generated building!
 
 ## About
 
-Originally worked on by Graham Barber and Damian Kulp (and maybe others, can't remember) for CodeDay 2016 in Portland.
+Originally worked on by Graham Barber, Fauzi Kliman, and Damian Kulp for CodeDay 2016 in Portland.
 
 ## Dev
 
