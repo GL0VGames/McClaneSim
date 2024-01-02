@@ -229,7 +229,7 @@ class McClaneGame {
 	}
 
 	public keyDown(e: KeyboardEvent) {
-		if (e.code == "Enter") {
+		if (e.key == "Enter") {
 			let userInput = this.console.getUserInput();
 			this.console.printUserInput(userInput);
 			this.console.clearUserInput();
@@ -244,12 +244,12 @@ class McClaneGame {
 			else
 				this.console.unknownCommand(userInput);
 		}
-		else if (e.code == "ArrowUp") {
+		else if (e.key == "ArrowUp") {
 			e.preventDefault();
 			e.stopPropagation();
 			this.console.setLastCommand();
 		}
-		else if (e.code == "ArrowDown")
+		else if (e.key == "ArrowDown")
 			this.console.setNextCommand();
 	}
 
