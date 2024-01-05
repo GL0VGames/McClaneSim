@@ -154,7 +154,7 @@ class Enemy extends Actor {
 				this.console.print(`The terrorist ${this.name} ${stationaryActions[utils.getRandomIntExc(0, stationaryActions.length)]} but doesn't seem to notice you.`);
 		}
 
-		if (dom.get("#worldViewer").style.display = "grid") {
+		if (dom.get("#worldViewer").style.display == "grid") {
 			this.map.viewWorld(actors);
 		}
 
