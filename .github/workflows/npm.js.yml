@@ -34,11 +34,10 @@ jobs:
 
     # Create artifact and deploy
     - name: Upload GitHub Pages artifact
-      uses: actions/upload-pages-artifact@v2
+      uses: actions/upload-pages-artifact@v3
       with:
         # Path of the directory containing the static assets.
         path: ./dist/client # default is _site/
-        name: 'github-pages'
   
   # Deployment job
   deploy:
